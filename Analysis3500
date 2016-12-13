@@ -24,7 +24,7 @@ $numArgs = $#ARGV + 1;
 
 if ($numArgs != 12)
 {
-	die "Error: improper variables given.\n\nUsage: Analysis3500 file_name clidump_path server_info dump_path sp_name debug_level sp_info dvmstat dmstats AVL con_out sessions\n\n\tfile_name\tfile name of the debug dump you want to analyze\n\t\t\t\tfor example, 'debugdump-hostname-LC-date-time'\n\tclidump_path\tfull path of debug dump clidump location\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/'\n\tserver_info\tpath of serverinfo.txt current debug dump\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/serverinfo.txt'\n\tdump_path\tpath to root of current debug dump directory\n\t\t\t\t for example, /Access.Share/support/Debug_Dump/Customer/debugdump-hostname-LC-date-time\n\tsp_name  \tstorage pool name\n\t\t\t\tfor example, 'sp0'\n\tdebug_level\tenable/disable debugging\n\t\t\t\t0 = disable, 1 = enable\n\tsp_info  \tpath to info file for storage pool\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/sp0/info'\n\tdvmstat  \tdvmstat file for system\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/dvmstat'\n\tdmstats  \tdmstats file for storage pool\n\t\t\t\t for example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/sp0/dmstats'\n\tAVL      \tAVL list to ensure proper endurance level information is analyzed\n\t\t\t\tmust be the following '/Access.Share/support/MT_Debug_Flash/ssd_avl_list.csv'\n\tcon_out  \tlocation of containeroutput.txt file\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/containeroutput.txt'\n\tsessions\tlocation of iSCSI sessions detailed file\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/iscsi/proc/scsi_target/iscsi_target/sessions'\n";
+	die "Error: improper variables given.\n\nUsage: Analysis3500 file_name clidump_path server_info dump_path sp_name debug_level sp_info dvmstat dmstats AVL con_out sessions\n\n\tfile_name\tfile name of the debug dump you want to analyze\n\t\t\t\tfor example, 'debugdump-hostname-LC-date-time.tar.gz'\n\tclidump_path\tfull path of debug dump clidump location\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/'\n\tserver_info\tpath of serverinfo.txt current debug dump\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/serverinfo.txt'\n\tdump_path\tpath to root of current debug dump directory\n\t\t\t\t for example, /Access.Share/support/Debug_Dump/Customer/debugdump-hostname-LC-date-time\n\tsp_name  \tstorage pool name\n\t\t\t\tfor example, 'sp0'\n\tdebug_level\tenable/disable debugging\n\t\t\t\t0 = disable, 1 = enable\n\tsp_info  \tpath to info file for storage pool\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/sp0/info'\n\tdvmstat  \tdvmstat file for system\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/dvmstat'\n\tdmstats  \tdmstats file for storage pool\n\t\t\t\t for example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/sp0/dmstats'\n\tAVL      \tAVL list to ensure proper endurance level information is analyzed\n\t\t\t\tmust be the following '/Access.Share/support/MT_Debug_Flash/ssd_avl_list.csv'\n\tcon_out  \tlocation of containeroutput.txt file\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/containeroutput.txt'\n\tsessions\tlocation of iSCSI sessions detailed file\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/iscsi/proc/scsi_target/iscsi_target/sessions'\n";
 }
 
 print "Beginning analysis of ", BLUE, $file, RESET, "...\n";
@@ -33,7 +33,7 @@ logger(__LINE__,"file being analyzed is $file") if ($debug);
 ## Get system information
 chomp($serverName = `grep --color=never Name $info | awk '{print \$4}'`);	logger(__LINE__,"Server name is $serverName") if ($debug);
 chomp($ver = `grep --color=never Version $info | awk '{print \$5}'`);		logger(__LINE__,"Version is $ver") if ($debug);
-chomp($rev = `grep --color=never Revision $info | awk '{print \$5}'`);		logger(__LINE__,"Revision is $rev") if ($debug);
+chomp($rev = `grep --color=never Revision $info | awk '{print \$5}'`);		logger(__LINE__,"Revision is $rev\n") if ($debug);
 
 my $analysis_dir = $debug_dir . "/" . "analysis";
 ## Make directory for debug dump analysis
@@ -66,7 +66,7 @@ while($line=<$FH>)
 	elsif ($line =~ /Volume Size\s+: \d+ \(Sec\)\s+([\d]+)/) {logger(__LINE__, "volume size is: $1") if ($debug); $Size{$name} = $1; }
 	elsif ($line =~ /Volume Provision Type\s+: ([\w]+)/) { logger(__LINE__, "${name}'s provision type is: $1") if ($debug); $Provision{$name} = $1; }
 	elsif ($line =~ /Tier Residency Profile\s+: ([\w]+)/) { logger(__LINE__, "${name}'s tier is: $1") if ($debug); $Profile{$name} = $1; }
-	elsif ($line =~ /SSD Cached\s+: ([\w]+)/) { logger(__LINE__, "${name}'s cache is: $1") if ($debug); $ssd{$name} = $1; }
+	elsif ($line =~ /SSD Cached\s+: ([\w]+)/) { logger(__LINE__, "${name}'s cache is: $1\n") if ($debug); $ssd{$name} = $1; }
 }
 close($FH);
 
@@ -260,7 +260,7 @@ if ($check2 =~ /stats.gz/) {
 foreach $n (@Name)
 {
 logger(__LINE__, "Volume is:   $n") if ($debug);
-	if ($rev eq "3.1" or $rev eq "3.2")
+	if ($rev ge "3.0")
 	{
 		$statsFile = "${dump_path}proc/dvm/$sp/$n/stats.txt";
 logger(__LINE__, "Stats File is:   $statsFile") if ($debug);
@@ -352,7 +352,7 @@ logger(__LINE__, "Snap for $n in $LD is:   $SNAPSPACE{$n}{$LD}") if ($debug);
 
 $lastLD = 0;
 
-if ($rev eq "3.1" or $rev eq "3.2")
+if ($rev ge "3.0")
 {
 	
 	OUTER: foreach $n (@Name)
@@ -1002,7 +1002,7 @@ print $ssdCacheOutput;
 print $OUTPUT "Volume Information\n";
 
 ## Analysis output to SDTOUT
-if ($rev ge "3.1")
+if ($rev ge "3.0")
 {
 	$analysis_output = Text::Table->new(
 			"--------------------\n|   Volume\n--------------------", "-\n|\n+", "---------------------\nProvisioned Size [GB]\n---------------------", "-\n|\n+", "--------\n$uTiers[0] [GB]\n--------", "-\n|\n+", "-----------\n$uTiers[1] [GB]\n-----------", "-\n|\n+",  "--------------------\nSnapshots ($uTiers[0]) [GB]\n--------------------", "-\n|\n+",  "-----------------------\nSnapshots ($uTiers[1]) [GB]\n-----------------------", "-\n|\n+",  "---------------\nProvision Type\n---------------", "-\n|\n+", "--------------\nTier Residency\n--------------", "-\n|\n+", "-------------------\nSSD Cache Profile |\n-------------------"
