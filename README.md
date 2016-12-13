@@ -1,2 +1,2 @@
 # AMI_Debug_Dumps
-StorTrends scripts to help download and analyze debug dumps
+StorTrends scripts to help download, extract, and analyze debug dumps
