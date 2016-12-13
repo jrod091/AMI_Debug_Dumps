@@ -1,0 +1,1308 @@
+#!/usr/bin/perl
+use File::Path qw(make_path remove_tree);
+use Net::FTP;
+use Term::ANSIColor qw(:constants colored );
+use Term::Size;
+use Text::Wrap;
+use Text::Table;
+use Math::Round;
+
+$file = $ARGV[0];
+$dump_path = $ARGV[1];
+$info =  $ARGV[2];
+$debug_dir = $ARGV[3];
+$sp = $ARGV[4];
+$debug = $ARGV[5];
+$spInfo = $ARGV[6];
+$spDvmstat = $ARGV[7];
+$dmstats = $ARGV[8];
+$ssdAVL = $ARGV[9];
+$iscsiSessionsFile = $ARGV[10];
+
+$numArgs = $#ARGV + 1;
+
+if ($numArgs != 11)
+{
+	die "Error: improper variables given.\n\nUsage: AnalysisChristy file_name clidump_path server_info dump_path sp_name debug_level sp_info dvmstat dmstats AVL sessions\n\n\tfile_name\tfile name of the debug dump you want to analyze\n\t\t\t\tfor example, 'debugdump-hostname-LC-date-time'\n\tclidump_path\tfull path of debug dump clidump location\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/'\n\tserver_info\tpath of serverinfo.txt current debug dump\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/serverinfo.txt'\n\tdump_path\tpath to root of current debug dump directory\n\t\t\t\t for example, /Access.Share/support/Debug_Dump/Customer/debugdump-hostname-LC-date-time\n\tsp_name  \tstorage pool name\n\t\t\t\tfor example, 'sp0'\n\tdebug_level\tenable/disable debugging\n\t\t\t\t0 = disable, 1 = enable\n\tsp_info  \tpath to info file for storage pool\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/sp0/info'\n\tdvmstat  \tdvmstat file for system\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/dvmstat'\n\tdmstats  \tdmstats file for storage pool\n\t\t\t\t for example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/proc/dvm/sp0/dmstats'\n\tAVL      \tAVL list to ensure proper endurance level information is analyzed\n\t\t\t\tmust be the following '/Access.Share/support/MT_Debug_Flash/ssd_avl_list.csv'\n\tsessions\tlocation of iSCSI sessions detailed file\n\t\t\t\tfor example, '/Access.Share/support/Debug_Dumps/Customer/debugdump-hostname-LC-date-time/opt/Mono/Storage/dvmstat/Dump/clidump/iscsi/proc/scsi_target/iscsi_target/sessions'\n";
+}
+
+print "Beginning analysis of ", BLUE, $file, RESET, "...\n";
+
+## Get system information
+chomp($serverName = `grep --color=never Name $info | awk '{print \$4}'`);
+chomp($ver = `grep --color=never Version $info | awk '{print \$5}'`);
+chomp($rev = `grep --color=never Revision $info | awk '{print \$5}'`);
+
+my $analysis_dir = $debug_dir . "/" . "analysis";
+## Make directory for debug dump analysis
+if ( ! -d $analysis_dir)
+{
+	make_path($analysis_dir);
+}
+
+## Path variables
+$path1 = $dump_path . "dvmstat/opt/Mono/Storage/dvmstat/ld_stats/";
+
+## File variables
+@ld_files = `ls $path1*vdo* | cut -d'/' -f19 | grep --color=never -v peak`;
+
+#--------------------------------------------------------------------------------------------------------------------
+## Volume Information retrieval
+my $iscsiLast20sec = $dump_path . "iSCSILast20secVolIOPS.txt";
+
+open ($FH, "<",$iscsiLast20sec);
+$i = 0;
+
+while ($line = <$FH>)
+{
+	if ($line =~ /volume\s+name='([\w\d]+)'\s+capacity='(\d+)'\s+volused='([\d\.]+)'\s+volmapped='[\d\.]+'\s+snapused='([\d\.]+)'\s+rlat='([\d\.]+)'\s+wlat='([\d\.]+)'\s+rThruPut='([\d\.]+)'\s+wThruPut='([\d\.]+)'\s+riops='([\d\.]+)'\s+wiops='([\d\.]+)'\s+tierprofile='([\w]+)'/)
+	{ 
+		$Name[$i] = $1;
+		$Name[$i]{Size} = $2;
+		$Name[$i]{Used} = $3;
+		$Name[$i]{snap} = $4;
+		$Name[$i]{rlat} = $5;
+		$Name[$i]{wlat} = $6;
+		$Name[$i]{rthr} = $7;
+		$Name[$i]{wthr} = $8;
+		$Name[$i]{riops} = $9;
+		$Name[$i]{wiops} = $10;
+		$Name[$i]{Profile} = $11;
+		
+		$i++;
+	}
+}
+
+$a = 0;
+$b = 0;
+
+@Name = sort { lc($a) cmp lc($b) } @Name;
+
+#--------------------------------------------------------------------------------------------------------------------
+## LD Latency Retrieval
+my $iscsiLastHr = $dump_path . "iSCSILasthourIOPS.txt";
+my $iscsiLatency = $dump_path . "iSCSILatency.txt";
+
+
+## iSCSILastHour pull
+open($FH,"<",$iscsiLastHr);
+$i = 0;
+
+while($line = <$FH>)
+{
+	if ($line =~ /([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)/)
+	{
+		$readLat[$i] = $1;
+		$writeLat[$i] = $2;
+		$readMBPS[$i] = $3;
+		$writeMBPS[$i] = $4;
+		$readIOPS[$i] = $5;
+		$writeIOPS[$i] = $6;
+		$totalLat[$i] = $7;
+		$totalMBPS[$i] = $8;
+		$totalIOPS[$i] = $9;
+		$read512[$i] = $10;
+		$write512[$i] = $11 * 2;
+		$read4k[$i] = $12;
+		$write4k[$i] = $13;
+		$read8k[$i] = $14 * 2;
+		$write8k[$i] = $15 * 2;
+		$read16k[$i] = $16 * 4;
+		$write16k[$i] = $17 * 4;
+		$read32k[$i] = $18 * 8;
+		$write32k[$i] = $19 * 8;
+		$read64k[$i] = $20 * 16;
+		$write64k[$i] = $21 * 16;
+		$read128k[$i] = $22 * 32;
+		$write128k[$i] = $23 * 32;
+		$read256k[$i] = $24 * 64;
+		$write256k[$i] = $25 * 64;
+		$read512kp[$i] = $26;
+		$write512kp[$i] = $27;
+		$read[$i] = $read512[$i] + $read4k[$i] + $read8k[$i] + $read16k[$i] + $read32k[$i] + $read64k[$i] + $read128k[$i] + $read256k[$i] + $read512kp[$i] + + $read[$i];
+		$write[$i] = $write512[$i] + $write4k[$i] + $write8k[$i] + $write16k[$i] + $write32k[$i] + $write64k[$i] + $write128k[$i] + $write256k[$i] + $write512kp[$i] + $write[$i];
+		$total[$i] = $read512[$i] + $write512[$i] + $read4k[$i] + $write4k[$i] + $read8k[$i] + $write8k[$i] + $read16k[$i] + $write16k[$i] + $read32k[$i] + $write32k[$i] + $read64k[$i] + $write64k[$i] + $read128k[$i] + $write128k[$i] + $read256k[$i] + $write256k[$i] + $read512kp[$i] + $write512kp[$i] + $total[$i];
+		
+		# sum of each entry to find average for last hour
+		$rl = $rl + $1;
+		$wl = $wl + $2;
+		$rm = $rm + $3;
+		$wm = $wm + $4;
+		$ri = $ri + $5;
+		$wi = $wi + $6;
+		$tl = $tl + $7;
+		$tm = $tm + $8;
+		$ti = $ti + $9;
+		$r512 = $r512 + $10;
+		$w512 = $w512 + $11;
+		$r4 = $r4 + $12;
+		$w4 = $w4 + $13;
+		$r8 = $r8 + $14;
+		$w8 = $w8 + $15;
+		$r16 = $r16 + $16;
+		$w16 = $w16 + $17;
+		$r32 = $r32 + $18;
+		$w32 = $w32 + $19;
+		$r64 = $r64 + $20;
+		$w64 = $w64 + $21;
+		$r128 = $r128 + $22;
+		$w128 = $w128 + $23;
+		$r256 = $r256 + $24;
+		$w256 = $w256 + $25;
+		$r512p = $r512p + $26;
+		$w512p = $w512p + $27;
+		$readIO = $readIO + $read[$i];
+		$writeIO = $writeIO + $write[$i];
+		$totalIO = $totalIO + $total[$i];
+		
+		$i++;
+	}
+}
+
+close($FH);
+
+## Hourly stats
+open($FH, "<", $iscsiLatency);
+$i = 0;
+@months = ("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec");
+
+while ($line = <$FH>)
+{
+	if ($line =~ /H(\d+)\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]\s+\[\s+(\d+)\]\[\s+(\d+)\]/)
+	{
+		$hour[$i] = $1;
+		$read1ms[$i] = $2;
+		$write1ms[$i] = $3;
+		$read10ms[$i] = $4;
+		$write10ms[$i] = $5;
+		$read50ms[$i] = $6;
+		$write50ms[$i] = $7;
+		$read100ms[$i] = $8;
+		$write100ms[$i] = $9;
+		$read500ms[$i] = $10;
+		$write500ms[$i] = $11;
+		$read1s[$i] = $12;
+		$write1s[$i] = $13;
+		$read2s[$i] = $14;
+		$write2s[$i] = $15;
+		$read10s[$i] = $16;
+		$write10s[$i] = $17;
+		$read20s[$i] = $18;
+		$write20s[$i] = $19;
+		$readgt20s[$i] = $20;
+		$writegt20s[$i] = $21;
+		
+		# Calculate total for last month of I/Os 500ms and above
+		$Read1s = $Read1s + $12;
+		$Write1s = $Write1s + $13;
+		$Read2s = $Read2s + $14;
+		$Write2s = $Write2s + $15;
+		$Read10s = $Read10s + $16;
+		$Write10s = $Write10s + $17;
+		$Read20s = $Read20s + $18 + $20;
+		$Write20s = $Write20s + $19 + $21;
+		
+		# Calculate total for last week of I/Os 500ms and above
+		if ($1 >= 1 and $1 <= 168)
+		{
+			$Read1sW = $Read1sW + $12;
+			$Write1sW = $Write1sW + $13;
+			$Read2sW = $Read2sW + $14;
+			$Write2sW = $Write2sW + $15;
+			$Read10sW = $Read10sW + $16;
+			$Write10sW = $Write10sW + $17;
+			$Read20sW = $Read20sW + $18 + $20;
+			$Write20sW = $Write20sW + $19 + $21;
+		}
+		
+		# Calculate total for last day of I/Os 500ms and above
+		if ($1 >= 1 and $1 <= 24)
+		{
+			$Read1sD = $Read1sD + $12;
+			$Write1sD = $Write1sD + $13;
+			$Read2sD = $Read2sD + $14;
+			$Write2sD = $Write2sD + $15;
+			$Read10sD = $Read10sD + $16;
+			$Write10sD = $Write10sD + $17;
+			$Read20sD = $Read20sD + $18 + $20;
+			$Write20sD = $Write20sD + $19 + $21;
+		}
+		
+		$i++;
+	}
+}
+
+close($FH);
+
+#--------------------------------------------------------------------------------------------------------------------
+
+open($FH,"<",$spDvmstat);
+$i = 0;
+
+while ($line = <$FH>)
+{
+	if ($line =~ /Max LD command delay:\s+(\d+)\s+jiffies\s+(\w+)\s+to volume\s+([\d\w]+)\s+.+\s+ts\s+(\d+)/)
+	{
+		$layer[$i] = "LD";
+		$layerLat[$i] = $1;
+		$layerType[$i] = $2;
+		$layerVol[$i] = $3;
+		
+		($sec,$min,$hour,$day,$month,$year) = (localtime($4))[0,1,2,3,4,5];
+		$layerTime[$i] = $months[$month]." ".$day.",".($year+1900)." "."0" x (2-length($hour)).$hour.":"."0" x (2-length($min)).$min;
+		
+		$i++;
+	}
+	elsif ($line =~ /Max DVM command delay:\s+(\d+)\s+jiffies\s+(\w+)\s+to volume\s+([\d\w]+)\s+.+\s+ts\s+(\d+)/)
+	{
+		$layer[$i] = "DVM";
+		$layerLat[$i] = $1;
+		$layerType[$i] = $2;
+		$layerVol[$i] = $3;
+		
+		($sec,$min,$hour,$day,$month,$year) = (localtime($4))[0,1,2,3,4,5];
+		$layerTime[$i] = $months[$month]." ".$day.",".($year+1900)." "."0" x (2-length($hour))."0" x (2-length($min)).$hour.":"."0" x (2-length($min))."0" x (2-length($min))."0" x (2-length($min)).$min;
+		
+		$i++;
+	}
+}
+
+close($FH);
+
+# Volume iSCSI Latencies - MAX only
+open($FH,"<",$iscsiSessionsFile);
+
+while($line=<$FH>)
+{
+	if ($line =~/TargetName .+:l.([\w\d]+)/)
+	{
+		push(@tgt, $1);
+	}
+	elsif ($line =~ /InitiatorName .+:([\w\d\-]+)/)
+	{
+	push(@init, $1);
+	}
+	elsif ($line =~ /max_read_lat\s+(\d+) at ts (\d+)/)
+	{
+		push(@maxRead, $1);
+		push(@maxReadTime, findLocalTime($2));
+	}
+	elsif ($line =~ /max_write_lat\s+(\d+) at ts (\d+)/)
+	{
+		push(@maxWrite, $1);
+		push(@maxWriteTime, findLocalTime($2));
+	}
+	elsif ($line =~ /max_ats_lat\s+(\d+) at ts (\d+)/)
+	{
+		push(@maxATS, $1);
+		push(@maxATSTime, findLocalTime($2));
+	}
+	elsif ($line =~ /max_ws_lat\s+(\d+) at ts (\d+)/)
+	{
+		push(@maxWS, $1);
+		push(@maxWSTime, findLocalTime($2));
+	}
+	elsif ($line =~ /max_unmap_lat\s+(\d+) at ts (\d+)/)
+	{
+		push(@maxUNMAP, $1);
+		push(@maxUNMAPTtime, findLocalTime($2));
+	}
+	elsif ($line =~ /max_extcpy_lat\s+(\d+) at ts (\d+)/)
+	{
+		push(@maxXCOPY, $1);
+		push(@maxXCOPYTime, findLocalTime($2));
+	}
+	elsif ($line =~ /conn: cid (\d+) ip ([\d\.]+)/)
+	{
+		push(@iscsiip, $1);
+	}
+}
+
+close($FH);
+
+#--------------------------------------------------------------------------------------------------------------------
+## Tier Allocation and Blocks Written Retrieval
+
+##################################################
+# Tiers                                          #
+# ---------------------------------------------- #
+# 0 - RESERVED                                   #
+# 1 - RESERVED                                   #
+# 2 - E-SSD in 3600i                             #
+# 3 - C-SSD in 3600i; SSD Tier in 3500i          #
+# 4 - 15k SAS RAID 10                            #
+# 5 - 15k SAS RAID 5/6                           #
+# 6 - NL-SAS RAID 10                             #
+# 7 - NL-SAS RAID 5/6                            #
+##################################################
+
+logger(__LINE__, "*-*-*-*-*-*-*-*-*") if ($debug);
+logger(__LINE__, "TIER INFORMATION ") if ($debug);
+logger(__LINE__, "*-*-*-*-*-*-*-*-*") if ($debug);
+
+$check = `ls ${dump_path}proc/dvm/$sp/$Name[0]/ | grep --color=never info`;
+
+if ($check =~ /info.gz/) {
+	cmd_chk("","gzip -dvf ${dump_path}proc/dvm/$sp/*/info.gz >> /dev/null 2>&1");
+}
+
+$check2 = `ls ${dump_path}proc/dvm/$sp/$Name[0]/ | grep --color=never stats`;
+
+if ($check2 =~ /stats.gz/) {
+	cmd_chk("","gzip -dvf ${dump_path}proc/dvm/$sp/*/stats.gz >> /dev/null 2>&1");
+}
+
+foreach $n (@Name)
+{
+logger(__LINE__, "Volume is:   $n") if ($debug);
+	if ($rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2")
+	{
+		$statsFile = "${dump_path}proc/dvm/$sp/$n/stats.txt";
+logger(__LINE__, "Stats File is:   $statsFile") if ($debug);
+		open($fh, "<", $statsFile);
+
+		while ($Line = <$fh>)
+		{
+			chomp($Line);
+logger(__LINE__, "Current line is:   $Line") if ($debug);
+			if ($Line =~ /T\[(\d+)\] INTMP\[(\d+)\] CVTMP\[(\d+)\]/)
+			{
+				$tier = $1;
+					if    ($tier == 0 or $tier == 1) { next; }
+					elsif ($tier == 2) { $tier = "Write Tier"; }
+					elsif ($tier == 3) { $tier = "Read Tier"; }
+logger(__LINE__, "Current Tier is:   $tier") if ($debug);
+				$inPlaceTier = $2;
+				$currentTier = $3;
+				
+				if ($inPlaceTier > 0 or $currentTier > 0)
+				{
+					push @TIERS, $tier;
+					$INTMP{$n}{$tier} = $inPlaceTier;
+logger(__LINE__, "INTMP for $n in $tier is:   $INTMP{$n}{$tier}") if ($debug);
+				}
+				else
+				{
+					if (defined($tiers{$n}{$tier})) { next; }
+					$tiers{$n}{$tier} = 0;
+				}
+			}
+			
+			if ($Line =~ /LD\[(\d+)\] FVMP\[(\d+)\] INMP\[(\d+)\] CVMP\[(\d+)\]/)
+			{
+				$LD = $1;
+				$fullVolMap = $2;
+				$inPlaceLD = $3;
+				$currentLD = $4;
+				$snapSpace = $fullVolMap - $inPlaceLD;
+				
+				if ($fullVolMap != 0)
+				{
+					push @LDS, $LD;
+logger(__LINE__, "Current LD is:   $LD") if ($debug);
+					$FVMP{$n}{$LD} = $fullVolMap;
+logger(__LINE__, "FVMP for $n in $LD is:   $FVMP{$n}{$LD}") if ($debug);
+					$INMP{$n}{$LD} = $inPlaceLD;
+logger(__LINE__, "INMP for $n in $LD is:   $INMP{$n}{$LD}") if ($debug);
+					$CVMP{$n}{$LD} = $currentLD;
+logger(__LINE__, "CVMP for $n in $LD is:   $CVMP{$n}{$LD}") if ($debug);
+					$SNAPSPACE{$n}{$LD} = $snapSpace;
+logger(__LINE__, "Snap for $n in $LD is:   $SNAPSPACE{$n}{$LD}") if ($debug);
+				}
+			}
+		}
+		close($fh);
+	}
+	else
+	{
+		
+	}
+}
+
+@uTiers = uniq(@TIERS); 
+
+$lastLD = 0;
+
+if ($rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2")
+{
+	
+	OUTER: foreach $n (@Name)
+	{
+logger(__LINE__, "Current Volume is:   $n") if ($debug);
+		$i = 0;
+		INNER: foreach $lds (@LDS)
+		{
+logger(__LINE__, "      last LD was: $lastLD") if ($debug);
+			if ($lastLD > $lds) { $lastLD = 0; next OUTER; }
+			else { $lastLD = $lds };
+			$tierCheck = $INTMP{$n}{$TIERS[$i]};
+logger(__LINE__, "tierCheck for $n in $TIERS[$i] is:   $tierCheck") if ($debug);
+logger(__LINE__, "INMP for $n in $lds is:   $INMP{$n}{$lds}") if ($debug);
+			
+			if ($tierCheck == $INMP{$n}{$lds})
+			{
+				$tiers{$n}{$TIERS[$i]} = nearest(.01, $INMP{$n}{$lds} / 1024);
+				$snap{$n}{$TIERS[$i]} = nearest(.01, $SNAPSPACE{$n}{$lds} / 1024);
+logger(__LINE__, "") if ($debug);
+logger(__LINE__, "Tier for $n in $TIERS[$i] is:   $tiers{$n}{$TIERS[$i]}") if ($debug);
+logger(__LINE__, "Snap for $n in $TIERS[$i] is:   $snap{$n}{$TIERS[$i]}") if ($debug);
+logger(__LINE__, "INMP is equivalent to tierCheck, moving to next volume...") if ($debug);
+				$imp = 0;
+				$i++;
+				next INNER;
+			}
+			else
+			{
+logger(__LINE__, "INMP for $n in $lds is:   $inmp") if ($debug);
+				$inmp += $INMP{$n}{$lds};
+logger(__LINE__, "INMP for $n in $lds is:   $inmp") if ($debug);
+				$tiers{$n}{$TIERS[$i]} += nearest(.01, $INMP{$n}{$lds} / 1024);
+				$snap{$n}{$TIERS[$i]} += nearest(.01, $SNAPSPACE{$n}{$lds} / 1024);
+				
+				if ($inmp == $tierCheck)
+				{
+logger(__LINE__, "") if ($debug);
+logger(__LINE__, "Tier for $n in $TIERS[$i] is:   $tiers{$n}{$TIERS[$i]}") if ($debug);
+logger(__LINE__, "Snap for $n in $TIERS[$i] is:   $snap{$n}{$TIERS[$i]}") if ($debug);
+logger(__LINE__, "INMP is equivalent to tierCheck, moving to next volume...") if ($debug);
+					$inmp = 0;
+					$i++;
+					next INNER;
+				}
+				else
+				{
+logger(__LINE__, "Tier for $n in $TIERS[$i] is:   $tiers{$n}{$TIERS[$i]}") if ($debug);
+logger(__LINE__, "Snap for $n in $TIERS[$i] is:   $snap{$n}{$TIERS[$i]}") if ($debug);
+					next INNER;
+				}
+			}
+		}
+	}
+}
+
+$num = scalar(@Name);
+
+#--------------------------------------------------------------------------------------------------------------------
+## SMART output retrieval
+
+@drives = `grep --color=never dev ${dump_path}pdoutput.txt`;
+
+	foreach $d (@drives)
+	{
+			if ($d =~ /Disk Info for \<([\/a-z]+)\>/ )
+			{
+					push @drive, $1;
+			}
+	}
+
+@serials = `grep --color=never -i serial ${dump_path}pdoutput.txt`;
+$i = 0;
+
+	foreach $s (@serials)
+	{
+			if ($s =~ /Serial No\s+: ([A-Z0-9]+)/)
+			{
+					$serial{$drive[$i]} = $1;
+					$i++;
+			}
+	}
+
+@slots = `grep --color=never -i location ${dump_path}pdoutput.txt`;
+$i = 0;
+
+foreach $s (@slots)
+{
+		if ($s =~ /Disk Location\s+: Controller [0-9], Enclosure ([0-9]), Slot ([0-9]+)/)
+		{
+				$enclosure{$drive[$i]} = $1;
+				$slot{$drive[$i]} = $2;
+				$i++;
+		}
+}
+
+@vendors = `grep --color=never -i vendor ${dump_path}pdoutput.txt`;
+$i = 0;
+
+foreach $v (@vendors)
+{
+	if ($v =~ /Vendor Name\s+: ([A-Za-z0-9]+)/)
+	{
+		$vendor{$drive[$i]} = $1;
+		$i++;
+	}
+}
+
+@capacities = `grep --color=never -i capacity ${dump_path}pdoutput.txt`;
+$i = 0;
+
+foreach $c (@capacities)
+{
+	if ($c =~ /Disk Capacity\s+: ([0-9\.]+) GB/)
+	{
+		$capacity{$drive[$i]} = $1;
+		$i++;
+	}
+}
+
+@types = `grep --color=never -i type ${dump_path}pdoutput.txt`;
+$i = 0;
+
+foreach $t (@types)
+{
+	if ($t =~ /Disk Hardware type\s+: ([\w\-\s]+)/)
+	{
+		chomp($type{$drive[$i]} = $1);
+		$i++;
+	}
+}
+
+
+open($AVL,"<","$ssdAVL");
+
+while ($line = <$AVL>)
+{
+	if ($line =~ /[SAT]+,\w+,\w+,([\w\d\_\-]+),\d+,(\d+)/)
+	{
+		$mod = $1;
+		$endur{$mod} = $2;
+	}
+}
+
+close($AVL);
+
+open($SMART,"<","${dump_path}smart_output.txt");
+logger(__LINE__,"SMART path is ${dump_path}smart_output.txt") if ($debug);
+
+$i = -1;
+
+while ($line = <$SMART>)
+{
+	if ($line =~ /Product:\s+([0-9A-Z\_\-]+)/ or $line =~ /Device Model:\s+([\w\d\_]+)/)
+	{
+		$model = $1;
+		$i++;
+logger(__LINE__,"model for $drive[$i]: $model") if ($debug);
+	}
+	
+	if ($line =~ /Elements in grown defect list: ([0-9]+)/)
+	{
+		$defect{$drive[$i]} = $1;
+logger(__LINE__,"defects for $drive[$i]: $defect{$drive[$i]}") if ($debug);
+	}
+	
+	if ($line =~ /Non-medium error count:\s+([0-9]+)/)
+	{
+		$error{$drive[$i]} = $1;
+logger(__LINE__,"errors for $drive[$i]: $error{$drive[$i]}") if ($debug);
+	}
+	
+	if ($line =~ /read:\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+[0-9\.]+\s+([0-9]+)/)
+	{
+		$read{$drive[$i]} = $1;
+logger(__LINE__,"reads for $drive[$i]: $read{$drive[$i]}") if ($debug);
+	}
+	
+	if ($line =~ /write:\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+[0-9\.]+\s+([0-9]+)/)
+	{
+		$write{$drive[$i]} = $1;
+logger(__LINE__,"writes for $drive[$i]: $write{$drive[$i]}") if ($debug);
+	}
+	
+	if ($line =~ /Current Drive Temperature:\s+([0-9\sC]+)/)
+	{
+		chomp($temp{$drive[$i]} = $1);
+logger(__LINE__,"temperature for $drive[$i]: $temp{$drive[$i]}") if ($debug);
+	}
+	
+	if ($line =~ /Percentage used endurance indicator:\s+(\d+)\%/)
+	{
+		$endurance{$drive[$i]} = 100 - $1;
+logger(__LINE__,"endurance for $drive[$i]: $endurance{$drive[$i]}") if ($debug);
+	}
+	elsif (defined($endur{$model}) and $line =~ /$endur{$model}\s+[\w\_]+\s+[\d\w]+\s+(\d+)/)
+	{
+		$endurance{$drive[$i]} = $1;
+logger(__LINE__,"endurance for $drive[$i]: $endurance{$drive[$i]}") if ($debug);
+	}
+	else
+	{
+		if ( ! defined($endurance{$drive[$i]}))
+		{
+			$endurance{$drive[$i]} = "N/A";
+logger(__LINE__,"endurance for $drive[$i]: $endurance{$drive[$i]}") if ($debug);
+		}
+	}
+}
+
+#--------------------------------------------------------------------------------------------------------------------
+## Pull critical and warning events from event log
+$events = "${dump_path}events.txt";
+@events = `grep --color=never -i -e crit -e warn $events`;
+
+#--------------------------------------------------------------------------------------------------------------------
+## Check file systems
+$df = $dump_path . "df.txt";
+chomp($md255 = `grep --color=never 255 $df | awk '{print \$5}'`);
+chomp($md252 = `grep --color=never 252 $df | awk '{print \$5}'`);
+
+#--------------------------------------------------------------------------------------------------------------------
+## UPS information
+$ups_info = $dump_path . "ups_info.txt";
+chomp($ups_check = `grep --color=never -i model $ups_info | awk '{print \$2}'`);
+
+chomp($temp = `grep --color=never -i model $ups_info`);
+if($temp =~ /Model\s+([A-Za-z0-9\-\s]+)/)
+{
+	$ups_model = $1;
+}
+
+chomp($temp = `grep --color=never -i status $ups_info | grep --color=never -v -i error`);
+if($temp =~ /Status\s+([A-Za-z\s]+)/)
+{
+	$ups_status = $1;
+}
+
+chomp($ups_load = `grep --color=never -i load $ups_info | awk '{print \$2,\" \", \$3}'`);
+chomp($ups_charge = `grep --color=never -i 'battery charge' $ups_info | awk '{print \$3, \" \", \$4}'`);
+chomp($ups_time = `grep --color=never -i 'time left' $ups_info | awk '{print \$3, \" \", \$4}'`);
+
+chomp($ups_min_charge = `grep --color=never -i 'min bat charge' $ups_info | awk '{print \$4, \" \", \$5}'`);
+chomp($ups_timeout = `grep --color=never -i timeout $ups_info | awk '{print \$2, \" \", \$3}'`);
+
+#--------------------------------------------------------------------------------------------------------------------
+## LD info
+$ldoutput = "${dump_path}ldoutput.txt";
+
+@lds = `grep --color=never dev $ldoutput`;
+@raid_level = `grep --color=never -i 'raid level' $ldoutput | awk '{print \$6}'`;
+@spares = `grep --color=never -i spares $ldoutput | awk '{print \$7}'`;
+@states = `grep --color=never -i state $ldoutput | awk '{print \$5}'`;
+@disks = `grep --color=never -i 'disk name' $ldoutput | grep --color=never -v -i spare`;
+@spare_disk  = `grep --color=never -i 'spare disk name' $ldoutput | awk '{print \$5}'`;
+
+
+foreach $ld (@lds)
+{
+	if ($ld =~ /Logical Drive Info for LD <([\/a-z0-9]+)>/)
+	{
+		push @ld, $1;
+	}
+}
+
+$s = $i = 0;
+
+foreach $ld (@ld)
+{
+	$raid{$ld} = $raid_level[$i];
+	
+	if ($spares[$i] > 0)
+	{
+		$spare{$ld} = $spare_disk[$s];
+		$s++;
+	}
+	
+	$state{$ld} = $states[$i];
+	
+	chomp($disks[$i]);
+	if ($disks[$i] =~ /Disk Name\s+:\s+(.+)/)
+	{
+		$disk{$ld} = $1;
+	}
+	
+	$i++;
+}
+
+sort @ld;
+
+#--------------------------------------------------------------------------------------------------------------------
+## Gather Network Info
+$networkinfo = "${dump_path}networkinfo.txt";
+$ifconfig = "${dump_path}ifconfig.txt";
+
+open($fh, '<', $networkinfo);
+
+while($line = <$fh>)
+{
+	if($line =~ /Network Interface \(([\w\-\d]+)\)/)
+	{
+		$interface = $1;
+		push @interfaces, $interface;
+	}
+	elsif($line =~ /IP Address\s+: ([\d\.]+)/)
+	{
+		$ip{$interface} = $1;
+	}
+	elsif($line =~ /Speed\s+: ([\d]+) Mbps/)
+	{
+		$speed{$interface} = $1;
+	}
+	elsif($line =~ /MTU Size\s+: ([\d]+)/)
+	{
+		$mtu{$interface} = $1;
+	}
+}
+close($fh);
+
+open($fh, '<', $ifconfig);
+
+while ($line = <$fh>)
+{
+	if($line =~ /bond(\d)\s+Link encap:Ethernet\s+HWaddr ([0-9A-Z\:]+)/)
+	{
+		$a = $1 + 1;
+		$inter = "Team-$a";
+		$mac{$inter} = $2;
+		push @ints, $inter;
+	}
+	elsif($line =~ /eth(\d)\s+Link encap:Ethernet\s+HWaddr ([0-9A-Z\:]+)/)
+	{
+		$a = $1 + 1;
+		$inter = "NIC-$a";
+		$mac{$inter} = $2;
+		push @ints, $inter;
+	}
+	elsif($line =~ /RX packets:([\d]+) errors:([\d]+) dropped:([\d]+) overruns:([\d]+) frame:([\d]+)/)
+	{
+		$rxpackets{$inter} = $1;
+		$rxerrors{$inter} = $2;
+		$rxdropped{$inter} = $3;
+		$rxoverruns{$inter} = $4;
+		$rxframe{$inter} = $5;
+	}
+	elsif($line =~ /TX packets:([\d]+) errors:([\d]+) dropped:([\d]+) overruns:([\d]+) carrier:([\d]+)/)
+	{
+		$txpackets{$inter} = $1;
+		$txerrors{$inter} = $2;
+		$txdropped{$inter} = $3;
+		$txoverruns{$inter} = $4;
+		$txcarrier{$inter} = $5;
+	}
+	elsif($line =~ /collisions:([\d]+) txqueuelen:([\d]+)/)
+	{
+		$txcollisions{$inter} = $1;
+		$txqueuelen{$inter} = $2;
+	}
+	elsif($line =~ /RX bytes:([\d]+) \([\d\.]+\ [\w]+\)\s+TX bytes:([\d]+) \([\d\.]+\ [\w]+\)/)
+	{
+		$rx{$inter} = nearest(.01, ($1 / 1024 / 1024 / 1024));
+		$tx{$inter} = nearest(.01, ($2 / 1024 / 1024 / 1024));
+	}
+}
+
+$q = scalar(@ints);	
+
+INT: foreach $int (@interfaces)
+{
+	$i = 0;
+	
+	while ($i < $q)
+	{
+		if ($ints[$i] eq $int)
+		{
+			$mac{$int} = $mac{$ints[$i]};
+			
+			$rxpackets{$int} = $rxpackets{$ints[$i]};
+			$rxerrors{$int} = $rxerrors{$ints[$i]};
+			$rxdropped{$int} = $rxdropped{$ints[$i]};
+			$rxoverruns{$int} = $rxoverruns{$ints[$i]};
+			$rxframe{$int} = $rxframe{$ints[$i]};
+			
+			$txpackets{$int} = $txpackets{$ints[$i]};
+			$txerrors{$int} = $txerrors{$ints[$i]};
+			$txdropped{$int} = $txdropped{$ints[$i]};
+			$txoverruns{$int} = $txoverruns{$ints[$i]};
+			$txcarrier{$int} = $txcarrier{$ints[$i]};
+			$txcollisions{$int} = $txcollisions{$ints[$i]};
+			$txqueuelen{$int} = $txqueuelen{$ints[$i]};
+			
+			$rx{$int} = $rx{$ints[$i]};
+			$tx{$int} = $tx{$ints[$i]};
+			next INT;
+		}
+		
+		$i++;
+	}
+}
+
+#--------------------------------------------------------------------------------------------------------------------
+
+if ($debug_dir =~ /.+-([\d]+)-([\d]+)/) 
+{
+	$analysisFile = $analysis_dir . "/analysis-$1-$2.csv";
+}
+open($OUTPUT, ">", $analysisFile);
+
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "*                                                                                                   Server Summary                                                                                                  *\n";
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "Server Name: $serverName\n";
+print "iTX Version: ${ver}v$rev\n";
+print "root (/) filesystem usage: $md255\n";
+print "log (/var/log) filesystem usage: $md252\n\n";
+
+print $OUTPUT "Server Summary\n";
+print $OUTPUT "Server Name,$serverName\n";
+print $OUTPUT "iTX Version,${ver}v$rev\n";
+print $OUTPUT "root (/) filesystem usage,$md255\n";
+print $OUTPUT "log (/var/log) filesystem usage,$md252\n\n";
+
+$srmpolicies = "${dump_path}srmpolicies.txt";
+
+@demotionPolicies = `grep --color=never -A 3 'Tier residency for Container' $srmpolicies`;
+@promotionPolicies = `grep --color=never -A 3 'Promotion policy for Container' $srmpolicies`;
+
+foreach $dem (@demotionPolicies)
+{
+	chomp $dem;
+	if ($dem =~ /Number of tiers \[(\d)\]/)
+	{
+		$num_tiers = $1;
+	}
+	elsif ($dem =~ /Tier \[(\d)\]: ([\d]+) days/)
+	{
+		$currTier = $1;
+		if ($currTier < $num_tiers)
+		{
+			$demo = $2;
+		}
+	}
+}
+
+foreach $pro (@promotionPolicies)
+{
+	chomp $pro;
+	if ($pro =~ /Number of tiers \[(\d)\]/)
+	{
+		$num_tiers = $1;
+	}
+	elsif ($pro =~ /Tier \[(\d)\]: ([\d]+) Access count/)
+	{
+		$currTier = $1;
+		if ($currTier < $num_tiers)
+		{
+			$promo = $2;
+		}
+	}
+}
+
+$dmState = `grep --color=never 'data movement' $spInfo | awk '{print \$3}'`;
+
+print "Data Mover Status: $dmState\n";
+print "Current SRM Policies:\n---------------------\n";
+print "Demotion Policy: $demo Days\n";
+print "Promotion Policy: $promo Access\n\n";
+
+print $OUTPUT "Data Mover Status,$dmState\n";
+print $OUTPUT "Current SRM Policies\n";
+print $OUTPUT "Demo,$demo\n";
+print $OUTPUT "Promo,$promo\n\n";
+
+#--------------------------------------------------------------------------------------------------------------------
+$ldOutput = Text::Table->new(
+		"-----------\n| LD\n-----------", "-\n|\n+", "--------\nRAID Set\n--------", "-\n|\n+", "-------------\nState\n-------------", "-\n|\n+", "---------------------------------------------------------------------------------------------------------------------------------------------------------------------\n                                                                                  Disks\n---------------------------------------------------------------------------------------------------------------------------------------------------------------------", "-\n|\n+", "---------\nSpare   |\n---------"
+);
+
+print $OUTPUT "LD,RAID Set,State,Disks,Spare\n";
+
+foreach $ld (@ld)
+{
+	if ($ld ne "/dev/md255")
+	{
+		chomp ($raid{$ld});
+		chomp ($state{$ld});
+		chomp ($spare{$ld});
+		print $OUTPUT "$ld,$raid{$ld},$state{$ld},$disk{$ld},$spare{$ld}\n";
+		
+		$ldOutput->load(
+			[ "| $ld", "|", "$raid{$ld}", "|", "$state{$ld}", "|", "$disk{$ld}", "|", "$spare{$ld}" ]
+		);
+	}
+}
+
+print $ldOutput;
+
+#--------------------------------------------------------------------------------------------------------------------
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "*                                                                                              Critical/Warning Events                                                                                              *\n";
+print "*********************************************************************************************************************************************************************************************************************\n";
+
+print $OUTPUT "\nCritical/Warning Events\n";
+
+foreach $e (@events)
+{
+	if($e =~ /(\d+)\s+(\w+)\s+\[(\w+)\](.+)\<([0-9\/]+)\>\<([0-9\:]+)\>/)
+	{
+		$type = $2;
+		$cont = $3;
+		$evnt = $4;
+		$date = $5;
+		$time = $6;
+		
+		$event = "*$2* [$3] $4 <$5><$6>";
+		
+		print $OUTPUT "$2,[$3],$4,<$5><$6>\n";
+		
+		print "$event\n";
+	}
+}
+
+#--------------------------------------------------------------------------------------------------------------------
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "*                                                                                                 Disk Information                                                                                                  *\n";
+print "*********************************************************************************************************************************************************************************************************************\n";
+$smart_output = Text::Table->new(
+	"-----------\n| Disk Name\n-----------", "-\n|\n+", "--------\nLocation\n--------", "-\n|\n+", "--------\nVendor\n--------", "-\n|\n+", "---------------------\nSerial Number\n---------------------", "-\n|\n+", "------------------\nDrive Type\n------------------", "-\n|\n+", "--------\nCapacity\n--------", "-\n|\n+", "-----------\nTemperature\n-----------", "-\n|\n+", "-------------\nGrown Defects\n-------------", "-\n|\n+", "-----------------\nNon-Medium Errors\n-----------------", "-\n|\n+", "-----------------\nUncorrected Reads\n-----------------", "-\n|\n+", "------------------\nUncorrected Writes\n------------------", "-\n|\n+", "-----------\nEndurance |\n-----------"
+);
+	
+print $OUTPUT "\nDisk Information\n";
+print $OUTPUT "Disk Name,Location,Vendor,Serial Number,Drive Type,Capacity,Temperature,Grown Defects,Non-Medium Errors,Uncorrected Reads,Uncorrected Writes,Endurance\n";
+
+foreach $d (@drive)
+{
+	chomp ($temp{$d});
+	chomp ($temp{$d});
+	print $OUTPUT "$d,$enclosure{$d}:$slot{$d},$vendor{$d},$serial{$d},$type{$d},$capacity{$d},$temp{$d},$defect{$d},$error{$d},$read{$d},$write{$d},$endurance{$d}\n";
+		
+	$smart_output->load(
+		[ "| $d", "|", "$enclosure{$d}:$slot{$d}", "|", $vendor{$d}, "|", $serial{$d}, "|", $type{$d}, "|", $capacity{$d}, "|", $temp{$d}, "|", $defect{$d}, "|", $error{$d}, "|", $read{$d}, "|", "$write{$d}", "|", "$endurance{$d}" ]
+	);
+}
+print $smart_output;
+
+#--------------------------------------------------------------------------------------------------------------------
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "*                                                                                              Performance Information                                                                                              *\n";
+print "*********************************************************************************************************************************************************************************************************************\n";
+# Performance for last month
+$perf_output_lat_month = Text::Table->new(
+	"-----------------\n| IOs (0.5-1 sec)\n-----------------", "-\n|\n+", "-------------\nIOs (1-2 sec)\n-------------", "-\n|\n+", "--------------\nIOs (2-10 sec)\n--------------", "-\n|\n+", "------------------\nIOs (10-20+ sec) |\n------------------", "\t\n\t\n\t" , "\t\n\t\n\t" , "-----------------\n| IOs (0.5-1 sec)\n-----------------", "-\n|\n+", "-------------\nIOs (1-2 sec)\n-------------", "-\n|\n+", "--------------\nIOs (2-10 sec)\n--------------", "-\n|\n+", "------------------\nIOs (10-20+ sec) |\n------------------"
+);
+$perf_output_lat_month->load(
+	[ "| $Read1s", "|", "$Read2s", "|", "$Read10s", "|", "$Read20s", "\t" , "\t" , "| $Write1s", "|", "$Write2s", "|", "$Write10s", "|", "$Write20s" ]
+);
+
+print "                       Read Latency (last month)                       \t\t\t                       Write Latency (last month)\n";
+print "                       -------------------------                       \t\t\t                       --------------------------\n";
+print $perf_output_lat_month;
+
+# Performance for last week
+$perf_output_lat_week = Text::Table->new(
+	"-----------------\n| IOs (0.5-1 sec)\n-----------------", "-\n|\n+", "-------------\nIOs (1-2 sec)\n-------------", "-\n|\n+", "--------------\nIOs (2-10 sec)\n--------------", "-\n|\n+", "------------------\nIOs (10-20+ sec) |\n------------------", "\t\n\t\n\t" , "\t\n\t\n\t" , "-----------------\n| IOs (0.5-1 sec)\n-----------------", "-\n|\n+", "-------------\nIOs (1-2 sec)\n-------------", "-\n|\n+", "--------------\nIOs (2-10 sec)\n--------------", "-\n|\n+", "------------------\nIOs (10-20+ sec) |\n------------------"
+);
+$perf_output_lat_week->load(
+	[ "| $Read1sW", "|", "$Read2sW", "|", "$Read10sW", "|", "$Read20sW", "\t" , "\t" , "| $Write1sW", "|", "$Write2sW", "|", "$Write10sW", "|", "$Write20sW" ]
+);
+
+print "\n                      Read Latency (last week)                       \t\t\t                       Write Latency (last week)\n";
+print "                      ------------------------                       \t\t\t                       -------------------------\n";
+print $perf_output_lat_week;
+
+# Performance for last day
+$perf_output_lat_day = Text::Table->new(
+	"-----------------\n| IOs (0.5-1 sec)\n-----------------", "-\n|\n+", "-------------\nIOs (1-2 sec)\n-------------", "-\n|\n+", "--------------\nIOs (2-10 sec)\n--------------", "-\n|\n+", "------------------\nIOs (10-20+ sec) |\n------------------", "\t\n\t\n\t" , "\t\n\t\n\t" , "-----------------\n| IOs (0.5-1 sec)\n-----------------", "-\n|\n+", "-------------\nIOs (1-2 sec)\n-------------", "-\n|\n+", "--------------\nIOs (2-10 sec)\n--------------", "-\n|\n+", "------------------\nIOs (10-20+ sec) |\n------------------"
+);
+$perf_output_lat_day->load(
+	[ "| $Read1sD", "|", "$Read2sD", "|", "$Read10sD", "|", "$Read20sD", "\t" , "\t" , "| $Write1sD", "|", "$Write2sD", "|", "$Write10sD", "|", "$Write20sD" ]
+);
+
+print "\n                       Read Latency (last day)                       \t\t\t                       Write Latency (last day)\n";
+print "                       -----------------------                       \t\t\t                       ------------------------\n";
+print $perf_output_lat_day;
+
+$max_lats = Text::Table->new(
+	"-------------\n| Stack Layer\n-------------", "-\n|\n+", "--------------\nLatency [msec]\n--------------", "-\n|\n+", "-------\nIO Type\n-------", "-\n|\n+", "--------------------\nVolume\n--------------------", "-\n|\n+", "------------------\nTime             |\n------------------"
+);
+
+foreach $i (0..1)
+{
+	$max_lats->load(
+		[ "| $layer[$i]", "|", $layerLat[$i], "|", $layerType[$i], "|", $layerVol[$i], "|", $layerTime[$i] ]
+	);
+}
+
+print "\n\n                                   Max Latencies\n";
+print "                                   -------------\n";
+print $max_lats;
+
+# Average read/write latency
+$rl = nearest(.01, $rl / 179);
+$wl = nearest(.01, $wl / 179);
+# Average read/write throughput
+$rm = nearest(.01, $rm / 179);
+$wm = nearest(.01, $wm / 179);
+# Averagte read/write IOPS (unadjusted)
+$ri = nearest(.01, $ri / 179);
+$wi = nearest(.01, $wi / 179);
+# Total average latency/throughput/IOPS (unadjusted)
+$tl = nearest(.01, $tl / 179);
+$tm = nearest(.01, $tm / 179);
+$ti = nearest(.01, $ti / 179);
+# Average read/write/total per IO size
+$r512 = nearest(.01, $r512 / 179);		$w512 = nearest(.01, $w512 / 179);		$t512 = nearest(.01, $r512 + $w512);
+$r4 = nearest(.01, $r4 / 179);			$w4 = nearest(.01, $w4 / 179);			$t4 = nearest(.01, $r4 + $w4);
+$r8 = nearest(.01, $r8 / 179);			$w8 = nearest(.01, $w8 / 179);			$t8 = nearest(.01, $r8 + $w8);
+$r16 = nearest(.01, $r16 / 179);		$w16 = nearest(.01, $w16 / 179);		$t16 = nearest(.01, $r16 + $w16);
+$r32 = nearest(.01, $r32 / 179);		$w32 = nearest(.01, $w32 / 179);		$t32 = nearest(.01, $r32 + $w32);
+$r64 = nearest(.01, $r64 / 179);		$w64 = nearest(.01, $w64 / 179);		$t64 = nearest(.01, $r64 + $w64);
+$r128 = nearest(.01, $r128 / 179);		$w128 = nearest(.01, $w128 / 179);		$t128 = nearest(.01, $r128 + $w128);
+$r512p = nearest(.01, $r512p / 179);	$w512p = nearest(.01, $w512p / 179);	$t512p = nearest(.01, $r512p + $w512p);
+# Total read/write/total IO
+$r = $r512 + $r4 + $r8 + $r16 + $r32 + $r64 + $r128 + $r512p;
+$w = $w512 + $w4 + $w8 + $w16 + $w32 + $w64 + $w128 + $w512p;
+$t = $t512 + $t4 + $t8 + $t16 + $t32 + $t64 + $t128 + $t512p;
+# Percent read/write/total IO size
+$pr512 = nearest(.01, ($r512 / $r) * 100);		$pw512 = nearest(.01, ($w512 / $w) * 100);		$pt512 = nearest(.01, ($t512 / $t) * 100);
+$pr4 = nearest(.01, ($r4 / $r) * 100);			$pw4 = nearest(.01, ($w4 / $w) * 100);			$pt4 = nearest(.01, ($t4 / $t) * 100);
+$pr8 = nearest(.01, ($r8 / $r) * 100);			$pw8 = nearest(.01, ($w8 / $w) * 100);			$pt8 = nearest(.01, ($t8 / $t) * 100);
+$pr16 = nearest(.01, ($r16 / $r) * 100);		$pw16 = nearest(.01, ($w16 / $w) * 100);		$pt16 = nearest(.01, ($t16 / $t) * 100);
+$pr32 = nearest(.01, ($r32 / $r) * 100);		$pw32 = nearest(.01, ($w32 / $w) * 100);		$pt32 = nearest(.01, ($t32 / $t) * 100);
+$pr64 = nearest(.01, ($r64/ $r) * 100);			$pw64 = nearest(.01, ($w64/ $w) * 100);			$pt64 = nearest(.01, ($t64/ $t) * 100);
+$pr128 = nearest(.01, ($r128 / $r) * 100);		$pw128 = nearest(.01, ($w128 / $w) * 100);		$pt128 = nearest(.01, ($t128 / $t) * 100);
+$pr512p = nearest(.01, ($r512p / $r) * 100);	$pw512p = nearest(.01, ($w512p / $w) * 100);	$pt512p = nearest(.01, ($t512p / $t) * 100);
+# Average read/write/total IOPS (adjusted)
+$readIO = nearest(.01, $readIO / 179);
+$writeIO = nearest(.01, $writeIO / 179);
+$totalIO = nearest(.01, $totalIO / 179);
+
+# Performance numbers for last hour
+$per_hr = Text::Table->new(
+	"---------------------\n| Read Latency [msec]\n---------------------", "-\n|\n+", "--------------------\nWrite Latency [msec]\n--------------------", "-\n|\n+", "----------------------\nRead Throughput [MBps]\n----------------------", "-\n|\n+", "-----------------------\nWrite Throughput [MBps]\n-----------------------", "-\n|\n+", "---------\nRead IOPS\n---------", "-\n|\n+", "------------\nWrite IOPS |\n------------"
+);
+
+$per_hr->load(
+	[ "| $rl", "|", $wl, "|", $rm, "|", $wm, "|", $readIO, "|", $writeIO ]
+);
+
+print "\n\n                                            Performance Averages for Last Hour\n";
+print "                                            ----------------------------------\n";
+print $per_hr;
+
+# IO distribution
+$io_distro = Text::Table->new(
+	"---------\n| IO Size\n---------", "-\n|\n+", "--------\nRead [%]\n--------", "-\n|\n+", "---------\nWrite [%]\n---------", "-\n|\n+", "--------------------------\nOverall Distribution [%] |\n--------------------------"
+);
+
+$io_distro->load(
+	[ "| 512B", "|", $pr512, "|", $pw512, "|", $pt512 ],
+	[ "| 4K", "|", $pr4, "|", $pw4, "|", $pt4 ],
+	[ "| 8K", "|", $pr8, "|", $pw8, "|", $pt8 ],
+	[ "| 16K", "|", $pr16, "|", $pw16, "|", $pt16 ],
+	[ "| 32K", "|", $pr32, "|", $pw32, "|", $pt32 ],
+	[ "| 64K", "|", $pr64, "|", $pw64, "|", $pt64 ],
+	[ "| 128K", "|", $pr128, "|", $pw128, "|", $pt128 ],
+	[ "| 512K+", "|", $pr512p, "|", $pw512p, "|", $pt512p ],
+);
+
+print "\n\n                       IO Distribution\n";
+print "                       ----------------\n";
+print $io_distro;
+
+# Output to CSV file
+print $OUTPUT "\nPerformance Information\n";
+print $OUTPUT "Read Latency (last month)\n";
+print $OUTPUT "IOs (0.5-1 sec),IOs (1-2 sec),IOs (2-10 sec),IOs (10-20+ sec)\n";
+print $OUTPUT "$Read1s,$Read2s,$Read10s,$Read20s\n";
+print $OUTPUT "\nWrite Latency (last month)\n";
+print $OUTPUT "IOs (0.5-1 sec),IOs (1-2 sec),IOs (2-10 sec),IOs (10-20+ sec)\n";
+print $OUTPUT "$Write1s,$Write2s,$Write10s,$Write20s\n";
+print $OUTPUT "\nRead Latency (last week)\n";
+print $OUTPUT "IOs (0.5-1 sec),IOs (1-2 sec),IOs (2-10 sec),IOs (10-20+ sec)\n";
+print $OUTPUT "$Read1sW,$Read2sW,$Read10sW,$Read20sW\n";
+print $OUTPUT "\nWrite Latency (last week)\n";
+print $OUTPUT "IOs (0.5-1 sec),IOs (1-2 sec),IOs (2-10 sec),IOs (10-20+ sec)\n";
+print $OUTPUT "$Write1sW,$Write2sW,$Write10sW,$Write20sW\n";
+print $OUTPUT "\nRead Latency (last day)\n";
+print $OUTPUT "IOs (0.5-1 sec),IOs (1-2 sec),IOs (2-10 sec),IOs (10-20+ sec)\n";
+print $OUTPUT "$Read1sD,$Read2sD,$Read10sD,$Read20sD\n";
+print $OUTPUT "\nWrite Latency (last day)\n";
+print $OUTPUT "IOs (0.5-1 sec),IOs (1-2 sec),IOs (2-10 sec),IOs (10-20+ sec)\n";
+print $OUTPUT "$Write1sD,$Write2sD,$Write10sD,$Write20sD\n";
+print $OUTPUT "\nMax Latencies\n";
+print $OUTPUT "Stack Layer,Latency [msec],IO Type,Volume,Time\n";
+foreach $i (0..1)
+{
+	print $OUTPUT "$layer[$i],$layerLat[$i],$layerType[$i],$layerVol[$i],$layerTime[$i]\n";
+}
+print $OUTPUT "\nPerformance Averages for Last Hour\n";
+print $OUTPUT "Read Latency [msec], Write Latency [msec],Read Throughput [MBps],Write Throughput [MBps],Read IOPS,Write IOPS\n";
+print $OUTPUT "$rl,$wl,$rm,$wm,$ri,$wi\n";
+print $OUTPUT "\nIO Distribution\n";
+print $OUTPUT "IO Size,Read [%],Write [%],Overall Distribution [%]\n";
+print $OUTPUT "512B,$pr512,$pw512,$pt512\n";
+print $OUTPUT "4K,$pr4,$pw4,$pt4\n";
+print $OUTPUT "8K,$pr8,$pw8,$pt8\n";
+print $OUTPUT "16K,$pr16,$pw16,$pt16\n";
+print $OUTPUT "32K,$pr32,$pw32,$pt32\n";
+print $OUTPUT "64K,$pr64,$pw64,$pt64\n";
+print $OUTPUT "128K,$pr128,$pw128,$pt128\n";
+print $OUTPUT "512K+,$pr512p,$pw512p,$pt512p\n";
+
+#--------------------------------------------------------------------------------------------------------------------
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "*                                                                                                Network Information                                                                                                *\n";
+print "*********************************************************************************************************************************************************************************************************************\n";
+print $OUTPUT "\nNetwork Info\n";
+
+$networkOutput = Text::Table->new(
+	"----------------\n| Interface Name\n----------------", "-\n|\n+", "-----------------\nMAC Address\n-----------------", "-\n|\n+", "---------------\nIP\n---------------", "-\n|\n+", "------------\nSpeed [Mbps]\n------------", "-\n|\n+", "----\nMTU\n----", "-\n|\n+", "----------\nRX Errors\n----------", "-\n|\n+", "-----------\nRX Dropped\n-----------", "-\n|\n+", "------------\nRX Overruns\n------------", "-\n|\n+", "---------\nRX Frame\n---------", "-\n|\n+", "--------\nRX [GB]\n--------", "-\n|\n+", "----------\nTX Errors\n----------", "-\n|\n+", "-----------\nTX Dropped\n-----------", "-\n|\n+", "------------\nTX Overruns\n------------", "-\n|\n+", "-------------\nTX Collisions\n-------------", "-\n|\n+", "---------\nTX [GB] |\n---------"
+);
+
+print $OUTPUT "Interface Name,MAC Address,IP,Speed [Mbps],MTU,RX Errors,RX Dropped,RX Overruns,RX Frame,RX [GB],TX Errors,TX Dropped,TX Overruns,TX Collisions,TX [GB]\n";
+
+foreach $int (@interfaces)
+{
+	print $OUTPUT "$int,$mac{$int},$ip{$int},$speed{$int},$mtu{$int},$rxerrors{$int},$rxdropped{$int},$rxoverruns{$int},$rxframe{$int},$rx{$int},$txerrors{$int},$txdropped{$int},$txoverruns{$int},$txcollisions{$int},$tx{$int}\n";
+	
+	$networkOutput->load(
+		[ "| $int", "|", $mac{$int}, "|", $ip{$int}, "|", $speed{$int}, "|", $mtu{$int}, "|", $rxerrors{$int}, "|", $rxdropped{$int}, "|", $rxoverruns{$int}, "|", $rxframe{$int}, "|", $rx{$int}, "|", $txerrors{$int}, "|", $txdropped{$int}, "|", $txoverruns{$int}, "|", $txcollisions{$int}, "|", $tx{$int}
+	 ]
+	);
+}
+print $networkOutput;
+
+#--------------------------------------------------------------------------------------------------------------------
+print $OUTPUT "Volume Information\n";
+
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "*                                                                                                Volume Information                                                                                                 *\n";
+print "*********************************************************************************************************************************************************************************************************************\n";
+$analysis_output = Text::Table->new(
+		"--------------------\n|   Volume\n--------------------", "-\n|\n+", "---------------------\nProvisioned Size [GB]\n---------------------", "-\n|\n+", "---------------\n$uTiers[0] [GB]\n---------------", "-\n|\n+", "--------------\n$uTiers[1] [GB]\n--------------", "-\n|\n+",  "---------------------------\nSnapshots ($uTiers[0]) [GB]\n---------------------------", "-\n|\n+",  "--------------------------\nSnapshots ($uTiers[1]) [GB]\n--------------------------", "-\n|\n+", "----------------\nTier Residency |\n----------------"
+	);
+
+print $OUTPUT "Volume,Provisioned Size [GB],$uTiers[0] [GB],$uTiers[1] [GB],Snapshots ($uTiers[0]) [GB],Snapshots ($uTiers[1]) [GB],Tier Residency\n";
+
+$i = 0;
+while ($i < $num) {
+	$analysis_output->load(
+		["| $Name[$i]", "|", $Name[$i]{Size}, "|", $tiers{$Name[$i]}{$uTiers[0]}, "|", $tiers{$Name[$i]}{$uTiers[1]}, "|", $snap{$Name[$i]}{$uTiers[0]}, "|", $snap{$Name[$i]}{$uTiers[1]},"|", $Name[$i]{Profile} ]
+	);
+	
+	print $OUTPUT "$Name[$i],$Name[$i]{Size},$tiers{$Name[$i]}{$uTiers[0]},$tiers{$Name[$i]}{$uTiers[1]},$snap{$Name[$i]}{$uTiers[0]},$snap{$Name[$i]}{$uTiers[1]},$Name[$i]{Profile}\n";
+	
+	$i++;
+}
+print $analysis_output;	
+
+#--------------------------------------------------------------------------------------------------------------------
+print "*********************************************************************************************************************************************************************************************************************\n";
+print "*                                                                                                  UPS Information                                                                                                  *\n";
+print "*********************************************************************************************************************************************************************************************************************\n";
+
+print $OUTPUT "\nUPS Information\n";
+
+if($ups_check eq "N/A")
+{
+	print "No UPS detected.\n";
+	print $OUTPUT "N/A\n";
+}
+else
+{
+	print "Basic Info\n----------\n";
+	print "UPS Model: $ups_model\n";
+	print "UPS Status: $ups_status\n";
+	print "Current Load: $ups_load\n";
+	print "Current Charge: $ups_charge\n";
+	print "Time Left Based on Charge: $ups_time\n\n";
+	
+	print "Shutdown Configuration\n----------------------\n";
+	print "Shutdown Remaining Charge Reaches: $ups_min_charge\n";
+	print "Shutdown After Running on Battery Power For: $ups_timeout\n";
+	
+	print $OUTPUT "Basic Info\n";
+	print $OUTPUT "UPS Model,$ups_model\n";
+	print $OUTPUT "UPS Status,$ups_status\n";
+	print $OUTPUT "Current Load,$ups_load\n";
+	print $OUTPUT "Current Charge,$ups_charge\n";
+	print $OUTPUT "Time Left Based on charge,$ups_time\n";
+	
+	print $OUTPUT "Shutdown Configuration\n";
+	print $OUTPUT "Shutdown (charge),$ups_min_charge\n";
+	print $OUTPUT "Shutdown (Time),$ups_timeout\n";
+}
+
+print "*********************************************************************************************************************************************************************************************************************\n";
+
+print "Analysis complete. You may find the files at ", UNDERLINE GREEN, $analysis_dir, RESET, "\n";
+
+
+#---------------------------------------------------------------------------------------------------------------------#
+
+## Debug subroutine
+sub logger
+{
+	($line,$msg) = @_;
+	
+	@months = qw( JAan Fab Mar Apr May Jun Jul Aug Sep Oct Nov Dec );
+	@days = qw( Sun Mon Tue Wed Thu Fri Sat );
+	
+	($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = localtime();
+	$year += 1900;
+	
+	open(LOG, ">>", "/root/debugDump.log");
+	print LOG "AnalysisChristy: Line $line $months[$mon]/$mday/$year $hour:$min:$sec - $msg\n";
+	close(LOG);
+}
+
+## Failed command check subroutine
+sub cmd_chk
+{
+logger(__LINE__, "+++++++++++++++++++++++++") if ($debug);
+	($txt,$cmd) = @_;
+logger(__LINE__, "Text is $txt") if ($debug);
+logger(__LINE__, "Command is $cmd") if ($debug);
+
+	$rem = $columns - length($txt) + 9;
+	
+logger(__LINE__, "Checking command...") if ($debug);
+	if (system($cmd) != 0)
+	{
+logger(__LINE__, "Command failed") if ($debug);
+		printf("%${rem}s\n",colored('Failure!', 'RED'));
+logger(__LINE__, "+++++++++++++++++++++++++") if ($debug);
+		next;
+	}
+logger(__LINE__, "+++++++++++++++++++++++++") if ($debug);
+}
+
+## Success print subroutine
+sub my_print
+{
+logger(__LINE__, "~~~~~~~~~~~~~~~~~~~~~~~~~") if ($debug);
+	($txt,$nxt) = @_;
+logger(__LINE__, "Text is $txt") if ($debug);
+logger(__LINE__, "Next text is $nxt") if ($debug);
+
+	$rem = $columns - length($txt) + 9;
+
+logger(__LINE__, "Printing 'Success'...") if ($debug);
+	printf("%${rem}s\n",colored('Success!', 'GREEN'));
+	print $nxt if ($nxt ne '');
+logger(__LINE__, "~~~~~~~~~~~~~~~~~~~~~~~~~") if ($debug);
+}
+
+## Find unique entries in array
+sub uniq {
+  my %seen;
+  return grep { !$seen{$_}++ } @_;
+}
+
+## Convert epoch to localtime
+sub findLocalTime
+{
+        ($epoch) = @_;
+
+        if ($epoch eq "0")
+        {
+                $out = "";
+        }
+        else
+        {
+                ($sec, $min, $hour, $day,$month,$year) = (localtime($epoch))[0,1,2,3,4,5];
+                $year = $year + 1900;
+
+                $out = "$month/$day/$year " . "0" x (2 - length($hour)) . $hour . ":" . "0" x (2 - length($min)) . $min . ":" . "0" x (2 - length($sec)) . $sec;
+        }
+
+        return $out;
+}
