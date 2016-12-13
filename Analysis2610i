@@ -86,12 +86,12 @@ $wlp = 0;
 
 while($line = <$FH>)
 {
-	if ($line =~ /([\d\.]+)\s+\[\s+([\d\.]+)\]\s+\[\s+([\d\.]+)\]\[\s+([\d\.]+)\]\s+([\d\.]+)\s+\[\s+([\d\.]+)\]\s+\[\s+([\d\.]+)\]\[\s+([\d\.]+)\]\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)/)
+	if ($line =~ /([\d\.]+)\s+\[\s*([\d\.]+)\]\s+\[\s*([\d\.]+)\]\[\s*([\d\.]+)\]\s+([\d\.]+)\s+\[\s*([\d\.]+)\]\s+\[\s*([\d\.]+)\]\[\s*([\d\.]+)\]\s+([\d\.]+)\s*([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)/)
 	{
 		$readLatAvg[$i] = $1;
 		$readLatPk[$i] = $2;
 		$readLatRQD[$i] = $3;
-		$readLatWQD[$i] = $4
+		$readLatWQD[$i] = $4;
 		$writeLatAvg[$i] = $5;
 		$writeLatPk[$i] = $6;
 		$writeLatRQD[$i] = $7;
@@ -104,6 +104,7 @@ while($line = <$FH>)
 		$totalMBPS[$i] = $14;
 		$totalIOPS[$i] = $15;
 		$read512[$i] = $16;
+logger(__LINE__,"read512 for \{$i\} is [$read512[$i]]") if ($debug);
 		$write512[$i] = $17 * 2;
 		$read4k[$i] = $18;
 		$write4k[$i] = $19;
@@ -138,6 +139,7 @@ while($line = <$FH>)
 		$tm = $tm + $14;
 		$ti = $ti + $15;
 		$r512 = $r512 + $16;
+logger(__LINE__,"512b read count is up to: [$r512]") if ($debug);
 		$w512 = $w512 + $17;
 		$r4 = $r4 + $18;
 		$w4 = $w4 + $19;
@@ -359,7 +361,7 @@ if ($check2 =~ /stats.gz/) {
 foreach $n (@Name)
 {
 logger(__LINE__, "Volume is:   $n") if ($debug);
-	$statsFile = "${dump_path}proc/dvm/$sp/$n/stats.txt";
+	$statsFile = "${dump_path}proc/dvm/containers/$sp/volumes/$n/stats.txt";
 logger(__LINE__, "Stats File is:   $statsFile") if ($debug);
 	open($fh, "<", $statsFile);
 
@@ -371,8 +373,8 @@ logger(__LINE__, "Current line is:   $Line") if ($debug);
 		{
 			$tier = $1;
 				if    ($tier == 0 or $tier == 1) { next; }
-				elsif ($tier == 2) { $tier = "Write Tier"; }
-				elsif ($tier == 3) { $tier = "Read Tier"; }
+				elsif ($tier == 2) { $tier = "Hot Tier"; }
+				elsif ($tier == 3) { $tier = "Cold Tier"; }
 logger(__LINE__, "Current Tier is:   $tier") if ($debug);
 			$inPlaceTier = $2;
 			$currentTier = $3;
@@ -1031,6 +1033,7 @@ $tl = nearest(.01, $tl / 179);
 $tm = nearest(.01, $tm / 179);
 $ti = nearest(.01, $ti / 179);
 # Average read/write/total per IO size
+logger(__LINE__,"512b reads are: [$r512] and 512b writes are: [$w512] and total 512b are: [$t512]") if ($debug);
 $r512 = nearest(.01, $r512 / 179);		$w512 = nearest(.01, $w512 / 179);		$t512 = nearest(.01, $r512 + $w512);
 $r4 = nearest(.01, $r4 / 179);			$w4 = nearest(.01, $w4 / 179);			$t4 = nearest(.01, $r4 + $w4);
 $r8 = nearest(.01, $r8 / 179);			$w8 = nearest(.01, $w8 / 179);			$t8 = nearest(.01, $r8 + $w8);
@@ -1044,6 +1047,7 @@ $r = $r512 + $r4 + $r8 + $r16 + $r32 + $r64 + $r128 + $r512p;
 $w = $w512 + $w4 + $w8 + $w16 + $w32 + $w64 + $w128 + $w512p;
 $t = $t512 + $t4 + $t8 + $t16 + $t32 + $t64 + $t128 + $t512p;
 # Percent read/write/total IO size
+logger(__LINE__,"total read is: [$r] and total 512b reads are: [$r512]\n\t\ttotal write is: [$w] and total 512b writes are: [$w512]\n\t\ttotal is: [$t] and 512b total is: [$t512]") if ($debug);
 $pr512 = nearest(.01, ($r512 / $r) * 100);		$pw512 = nearest(.01, ($w512 / $w) * 100);		$pt512 = nearest(.01, ($t512 / $t) * 100);
 $pr4 = nearest(.01, ($r4 / $r) * 100);			$pw4 = nearest(.01, ($w4 / $w) * 100);			$pt4 = nearest(.01, ($t4 / $t) * 100);
 $pr8 = nearest(.01, ($r8 / $r) * 100);			$pw8 = nearest(.01, ($w8 / $w) * 100);			$pt8 = nearest(.01, ($t8 / $t) * 100);
