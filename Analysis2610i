@@ -81,70 +81,80 @@ my $iscsiLatency = $dump_path . "iSCSILatency.txt";
 ## iSCSILastHour pull
 open($FH,"<",$iscsiLastHr);
 $i = 0;
+$rlp = 0;
+$wlp = 0;
 
 while($line = <$FH>)
 {
-	if ($line =~ /([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)/)
+	if ($line =~ /([\d\.]+)\s+\[\s+([\d\.]+)\]\s+\[\s+([\d\.]+)\]\[\s+([\d\.]+)\]\s+([\d\.]+)\s+\[\s+([\d\.]+)\]\s+\[\s+([\d\.]+)\]\[\s+([\d\.]+)\]\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+):(\d+)/)
 	{
-		$readLat[$i] = $1;
-		$writeLat[$i] = $2;
-		$readMBPS[$i] = $3;
-		$writeMBPS[$i] = $4;
-		$readIOPS[$i] = $5;
-		$writeIOPS[$i] = $6;
-		$totalLat[$i] = $7;
-		$totalMBPS[$i] = $8;
-		$totalIOPS[$i] = $9;
-		$read512[$i] = $10;
-		$write512[$i] = $11 * 2;
-		$read4k[$i] = $12;
-		$write4k[$i] = $13;
-		$read8k[$i] = $14 * 2;
-		$write8k[$i] = $15 * 2;
-		$read16k[$i] = $16 * 4;
-		$write16k[$i] = $17 * 4;
-		$read32k[$i] = $18 * 8;
-		$write32k[$i] = $19 * 8;
-		$read64k[$i] = $20 * 16;
-		$write64k[$i] = $21 * 16;
-		$read128k[$i] = $22 * 32;
-		$write128k[$i] = $23 * 32;
-		$read256k[$i] = $24 * 64;
-		$write256k[$i] = $25 * 64;
-		$read512kp[$i] = $26;
-		$write512kp[$i] = $27;
+		$readLatAvg[$i] = $1;
+		$readLatPk[$i] = $2;
+		$readLatRQD[$i] = $3;
+		$readLatWQD[$i] = $4
+		$writeLatAvg[$i] = $5;
+		$writeLatPk[$i] = $6;
+		$writeLatRQD[$i] = $7;
+		$writeLatWQD[$i] = $8;
+		$readMBPS[$i] = $9;
+		$writeMBPS[$i] = $10;
+		$readIOPS[$i] = $11;
+		$writeIOPS[$i] = $12;
+		$totalLat[$i] = $13;
+		$totalMBPS[$i] = $14;
+		$totalIOPS[$i] = $15;
+		$read512[$i] = $16;
+		$write512[$i] = $17 * 2;
+		$read4k[$i] = $18;
+		$write4k[$i] = $19;
+		$read8k[$i] = $20 * 2;
+		$write8k[$i] = $21 * 2;
+		$read16k[$i] = $22 * 4;
+		$write16k[$i] = $23 * 4;
+		$read32k[$i] = $24 * 8;
+		$write32k[$i] = $25 * 8;
+		$read64k[$i] = $26 * 16;
+		$write64k[$i] = $27 * 16;
+		$read128k[$i] = $28 * 32;
+		$write128k[$i] = $29 * 32;
+		$read256k[$i] = $30 * 64;
+		$write256k[$i] = $31 * 64;
+		$read512kp[$i] = $32;
+		$write512kp[$i] = $33;
 		$read[$i] = $read512[$i] + $read4k[$i] + $read8k[$i] + $read16k[$i] + $read32k[$i] + $read64k[$i] + $read128k[$i] + $read256k[$i] + $read512kp[$i] + + $read[$i];
 		$write[$i] = $write512[$i] + $write4k[$i] + $write8k[$i] + $write16k[$i] + $write32k[$i] + $write64k[$i] + $write128k[$i] + $write256k[$i] + $write512kp[$i] + $write[$i];
 		$total[$i] = $read512[$i] + $write512[$i] + $read4k[$i] + $write4k[$i] + $read8k[$i] + $write8k[$i] + $read16k[$i] + $write16k[$i] + $read32k[$i] + $write32k[$i] + $read64k[$i] + $write64k[$i] + $read128k[$i] + $write128k[$i] + $read256k[$i] + $write256k[$i] + $read512kp[$i] + $write512kp[$i] + $total[$i];
 		
 		# sum of each entry to find average for last hour
 		$rl = $rl + $1;
-		$wl = $wl + $2;
-		$rm = $rm + $3;
-		$wm = $wm + $4;
-		$ri = $ri + $5;
-		$wi = $wi + $6;
-		$tl = $tl + $7;
-		$tm = $tm + $8;
-		$ti = $ti + $9;
-		$r512 = $r512 + $10;
-		$w512 = $w512 + $11;
-		$r4 = $r4 + $12;
-		$w4 = $w4 + $13;
-		$r8 = $r8 + $14;
-		$w8 = $w8 + $15;
-		$r16 = $r16 + $16;
-		$w16 = $w16 + $17;
-		$r32 = $r32 + $18;
-		$w32 = $w32 + $19;
-		$r64 = $r64 + $20;
-		$w64 = $w64 + $21;
-		$r128 = $r128 + $22;
-		$w128 = $w128 + $23;
-		$r256 = $r256 + $24;
-		$w256 = $w256 + $25;
-		$r512p = $r512p + $26;
-		$w512p = $w512p + $27;
+		if ($2 > $rlp) { $rlp = $2; }
+		$wl = $wl + $5;
+		if ($6 > $wlp) { $wlp = $6; }
+		$rm = $rm + $9;
+		$wm = $wm + $10;
+		$ri = $ri + $11;
+		$wi = $wi + $12;
+		$tl = $tl + $13;
+		$tm = $tm + $14;
+		$ti = $ti + $15;
+		$r512 = $r512 + $16;
+		$w512 = $w512 + $17;
+		$r4 = $r4 + $18;
+		$w4 = $w4 + $19;
+		$r8 = $r8 + $20;
+		$w8 = $w8 + $21;
+		$r16 = $r16 + $22;
+		$w16 = $w16 + $23;
+		$r32 = $r32 + $24;
+		$w32 = $w32 + $25;
+		$r64 = $r64 + $26;
+		$w64 = $w64 + $27;
+		$r128 = $r128 + $28;
+		$w128 = $w128 + $29;
+		$r256 = $r256 + $30;
+		$w256 = $w256 + $31;
+		$r512p = $r512p + $32;
+		$w512p = $w512p + $33;
 		$readIO = $readIO + $read[$i];
 		$writeIO = $writeIO + $write[$i];
 		$totalIO = $totalIO + $total[$i];
@@ -334,141 +344,130 @@ logger(__LINE__, "*-*-*-*-*-*-*-*-*") if ($debug);
 logger(__LINE__, "TIER INFORMATION ") if ($debug);
 logger(__LINE__, "*-*-*-*-*-*-*-*-*") if ($debug);
 
-$check = `ls ${dump_path}proc/dvm/$sp/$Name[0]/ | grep --color=never info`;
+$check = `ls ${dump_path}proc/dvm/containers/$sp/volumes/$Name[0]/ | grep --color=never info`;
 
 if ($check =~ /info.gz/) {
-	cmd_chk("","gzip -dvf ${dump_path}proc/dvm/$sp/*/info.gz >> /dev/null 2>&1");
+	cmd_chk("","gzip -dvf ${dump_path}proc/dvm/containers/$sp/*/info.gz >> /dev/null 2>&1");
 }
 
-$check2 = `ls ${dump_path}proc/dvm/$sp/$Name[0]/ | grep --color=never stats`;
+$check2 = `ls ${dump_path}proc/dvm/containers/$sp/volumes/$Name[0]/ | grep --color=never stats`;
 
 if ($check2 =~ /stats.gz/) {
-	cmd_chk("","gzip -dvf ${dump_path}proc/dvm/$sp/*/stats.gz >> /dev/null 2>&1");
+	cmd_chk("","gzip -dvf ${dump_path}proc/dvm/containers/$sp/*/stats.gz >> /dev/null 2>&1");
 }
 
 foreach $n (@Name)
 {
 logger(__LINE__, "Volume is:   $n") if ($debug);
-	if ($rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2")
-	{
-		$statsFile = "${dump_path}proc/dvm/$sp/$n/stats.txt";
+	$statsFile = "${dump_path}proc/dvm/$sp/$n/stats.txt";
 logger(__LINE__, "Stats File is:   $statsFile") if ($debug);
-		open($fh, "<", $statsFile);
+	open($fh, "<", $statsFile);
 
-		while ($Line = <$fh>)
-		{
-			chomp($Line);
+	while ($Line = <$fh>)
+	{
+		chomp($Line);
 logger(__LINE__, "Current line is:   $Line") if ($debug);
-			if ($Line =~ /T\[(\d+)\] INTMP\[(\d+)\] CVTMP\[(\d+)\]/)
-			{
-				$tier = $1;
-					if    ($tier == 0 or $tier == 1) { next; }
-					elsif ($tier == 2) { $tier = "Write Tier"; }
-					elsif ($tier == 3) { $tier = "Read Tier"; }
+		if ($Line =~ /T\[(\d+)\] INTMP\[(\d+)\] CVTMP\[(\d+)\]/)
+		{
+			$tier = $1;
+				if    ($tier == 0 or $tier == 1) { next; }
+				elsif ($tier == 2) { $tier = "Write Tier"; }
+				elsif ($tier == 3) { $tier = "Read Tier"; }
 logger(__LINE__, "Current Tier is:   $tier") if ($debug);
-				$inPlaceTier = $2;
-				$currentTier = $3;
-				
-				if ($inPlaceTier > 0 or $currentTier > 0)
-				{
-					push @TIERS, $tier;
-					$INTMP{$n}{$tier} = $inPlaceTier;
-logger(__LINE__, "INTMP for $n in $tier is:   $INTMP{$n}{$tier}") if ($debug);
-				}
-				else
-				{
-					if (defined($tiers{$n}{$tier})) { next; }
-					$tiers{$n}{$tier} = 0;
-				}
-			}
+			$inPlaceTier = $2;
+			$currentTier = $3;
 			
-			if ($Line =~ /LD\[(\d+)\] FVMP\[(\d+)\] INMP\[(\d+)\] CVMP\[(\d+)\]/)
+			if ($inPlaceTier > 0 or $currentTier > 0)
 			{
-				$LD = $1;
-				$fullVolMap = $2;
-				$inPlaceLD = $3;
-				$currentLD = $4;
-				$snapSpace = $fullVolMap - $inPlaceLD;
-				
-				if ($fullVolMap != 0)
-				{
-					push @LDS, $LD;
-logger(__LINE__, "Current LD is:   $LD") if ($debug);
-					$FVMP{$n}{$LD} = $fullVolMap;
-logger(__LINE__, "FVMP for $n in $LD is:   $FVMP{$n}{$LD}") if ($debug);
-					$INMP{$n}{$LD} = $inPlaceLD;
-logger(__LINE__, "INMP for $n in $LD is:   $INMP{$n}{$LD}") if ($debug);
-					$CVMP{$n}{$LD} = $currentLD;
-logger(__LINE__, "CVMP for $n in $LD is:   $CVMP{$n}{$LD}") if ($debug);
-					$SNAPSPACE{$n}{$LD} = $snapSpace;
-logger(__LINE__, "Snap for $n in $LD is:   $SNAPSPACE{$n}{$LD}") if ($debug);
-				}
+				push @TIERS, $tier;
+				$INTMP{$n}{$tier} = $inPlaceTier;
+logger(__LINE__, "INTMP for $n in $tier is:   $INTMP{$n}{$tier}") if ($debug);
+			}
+			else
+			{
+				if (defined($tiers{$n}{$tier})) { next; }
+				$tiers{$n}{$tier} = 0;
 			}
 		}
-		close($fh);
-	}
-	else
-	{
 		
+		if ($Line =~ /LD\[(\d+)\] FVMP\[(\d+)\] INMP\[(\d+)\] CVMP\[(\d+)\]/)
+		{
+			$LD = $1;
+			$fullVolMap = $2;
+			$inPlaceLD = $3;
+			$currentLD = $4;
+			$snapSpace = $fullVolMap - $inPlaceLD;
+			
+			if ($fullVolMap != 0)
+			{
+				push @LDS, $LD;
+logger(__LINE__, "Current LD is:   $LD") if ($debug);
+				$FVMP{$n}{$LD} = $fullVolMap;
+logger(__LINE__, "FVMP for $n in $LD is:   $FVMP{$n}{$LD}") if ($debug);
+				$INMP{$n}{$LD} = $inPlaceLD;
+logger(__LINE__, "INMP for $n in $LD is:   $INMP{$n}{$LD}") if ($debug);
+				$CVMP{$n}{$LD} = $currentLD;
+logger(__LINE__, "CVMP for $n in $LD is:   $CVMP{$n}{$LD}") if ($debug);
+				$SNAPSPACE{$n}{$LD} = $snapSpace;
+logger(__LINE__, "Snap for $n in $LD is:   $SNAPSPACE{$n}{$LD}") if ($debug);
+			}
+		}
 	}
+	close($fh);
 }
 
 @uTiers = uniq(@TIERS); 
 
 $lastLD = 0;
-
-if ($rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2")
-{
 	
-	OUTER: foreach $n (@Name)
-	{
+OUTER: foreach $n (@Name)
+{
 logger(__LINE__, "Current Volume is:   $n") if ($debug);
-		$i = 0;
-		INNER: foreach $lds (@LDS)
-		{
+	$i = 0;
+	INNER: foreach $lds (@LDS)
+	{
 logger(__LINE__, "      last LD was: $lastLD") if ($debug);
-			if ($lastLD > $lds) { $lastLD = 0; next OUTER; }
-			else { $lastLD = $lds };
-			$tierCheck = $INTMP{$n}{$TIERS[$i]};
+		if ($lastLD > $lds) { $lastLD = 0; next OUTER; }
+		else { $lastLD = $lds };
+		$tierCheck = $INTMP{$n}{$TIERS[$i]};
 logger(__LINE__, "tierCheck for $n in $TIERS[$i] is:   $tierCheck") if ($debug);
 logger(__LINE__, "INMP for $n in $lds is:   $INMP{$n}{$lds}") if ($debug);
-			
-			if ($tierCheck == $INMP{$n}{$lds})
-			{
-				$tiers{$n}{$TIERS[$i]} = nearest(.01, $INMP{$n}{$lds} / 1024);
-				$snap{$n}{$TIERS[$i]} = nearest(.01, $SNAPSPACE{$n}{$lds} / 1024);
+		
+		if ($tierCheck == $INMP{$n}{$lds})
+		{
+			$tiers{$n}{$TIERS[$i]} = nearest(.01, $INMP{$n}{$lds} / 1024);
+			$snap{$n}{$TIERS[$i]} = nearest(.01, $SNAPSPACE{$n}{$lds} / 1024);
 logger(__LINE__, "") if ($debug);
 logger(__LINE__, "Tier for $n in $TIERS[$i] is:   $tiers{$n}{$TIERS[$i]}") if ($debug);
 logger(__LINE__, "Snap for $n in $TIERS[$i] is:   $snap{$n}{$TIERS[$i]}") if ($debug);
 logger(__LINE__, "INMP is equivalent to tierCheck, moving to next volume...") if ($debug);
-				$imp = 0;
+			$imp = 0;
+			$i++;
+			next INNER;
+		}
+		else
+		{
+logger(__LINE__, "INMP for $n in $lds is:   $inmp") if ($debug);
+			$inmp += $INMP{$n}{$lds};
+logger(__LINE__, "INMP for $n in $lds is:   $inmp") if ($debug);
+			$tiers{$n}{$TIERS[$i]} += nearest(.01, $INMP{$n}{$lds} / 1024);
+			$snap{$n}{$TIERS[$i]} += nearest(.01, $SNAPSPACE{$n}{$lds} / 1024);
+			
+			if ($inmp == $tierCheck)
+			{
+logger(__LINE__, "") if ($debug);
+logger(__LINE__, "Tier for $n in $TIERS[$i] is:   $tiers{$n}{$TIERS[$i]}") if ($debug);
+logger(__LINE__, "Snap for $n in $TIERS[$i] is:   $snap{$n}{$TIERS[$i]}") if ($debug);
+logger(__LINE__, "INMP is equivalent to tierCheck, moving to next volume...") if ($debug);
+				$inmp = 0;
 				$i++;
 				next INNER;
 			}
 			else
 			{
-logger(__LINE__, "INMP for $n in $lds is:   $inmp") if ($debug);
-				$inmp += $INMP{$n}{$lds};
-logger(__LINE__, "INMP for $n in $lds is:   $inmp") if ($debug);
-				$tiers{$n}{$TIERS[$i]} += nearest(.01, $INMP{$n}{$lds} / 1024);
-				$snap{$n}{$TIERS[$i]} += nearest(.01, $SNAPSPACE{$n}{$lds} / 1024);
-				
-				if ($inmp == $tierCheck)
-				{
-logger(__LINE__, "") if ($debug);
 logger(__LINE__, "Tier for $n in $TIERS[$i] is:   $tiers{$n}{$TIERS[$i]}") if ($debug);
 logger(__LINE__, "Snap for $n in $TIERS[$i] is:   $snap{$n}{$TIERS[$i]}") if ($debug);
-logger(__LINE__, "INMP is equivalent to tierCheck, moving to next volume...") if ($debug);
-					$inmp = 0;
-					$i++;
-					next INNER;
-				}
-				else
-				{
-logger(__LINE__, "Tier for $n in $TIERS[$i] is:   $tiers{$n}{$TIERS[$i]}") if ($debug);
-logger(__LINE__, "Snap for $n in $TIERS[$i] is:   $snap{$n}{$TIERS[$i]}") if ($debug);
-					next INNER;
-				}
+				next INNER;
 			}
 		}
 	}
@@ -1234,7 +1233,7 @@ sub logger
 	$year += 1900;
 	
 	open(LOG, ">>", "/root/debugDump.log");
-	print LOG "AnalysisChristy: Line $line $months[$mon]/$mday/$year $hour:$min:$sec - $msg\n";
+	print LOG "Analysis2610: Line $line $months[$mon]/$mday/$year $hour:$min:$sec - $msg\n";
 	close(LOG);
 }
 

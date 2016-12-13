@@ -369,7 +369,6 @@ logger(__LINE__, "\$debug_dir is $debug_dir") if ($debug);
 		
 		## Extract debug dump to debug dump directory
 		$err = `tar -zxf $fpath -C $debug_dir 2>&1`;
-		#die "$err\n";
 		
 		if ($err =~ /error/i)
 		{
@@ -590,22 +589,27 @@ logger(__LINE__, "SAN is on 2.8 stack, 2.14 or earlier") if ($debug);
 	chomp($sp = `grep --color=never Name $con | awk '{print \$4}'`);
 	
 	## Set path to log.gz file
-	$log = $dump_path . "proc/dvm/$sp/log.gz";
+	if ($rev ge "5.0")	{ $log = $dump_path . "proc/dvm/containers/$sp/log.gz"; }
+	else				{ $log = $dump_path . "proc/dvm/$sp/log.gz"; }
 	
 	## Set path to stats.gz for $SP
-	$stat = $dump_path . "proc/dvm/$sp/stats.gz";
+	if ($rev ge "5.0")	{ $stat = $dump_path . "proc/dvm/containers/$sp/stats.gz"; }
+	else				{ $stat = $dump_path . "proc/dvm/$sp/stats.gz"; }
 
 	## Set path to info.gz files
-	$proc = $dump_path . "proc/dvm/$sp/*/info.gz";
+	if ($rev ge "5.0")	{ $proc = $dump_path . "proc/dvm/containers/$sp/volumes/*/info.gz"; }
+	else				{ $proc = $dump_path . "proc/dvm/$sp/*/info.gz"; }
 	
 	## Set path to info.gz file for $SP
-	$spInfo = $dump_path . "proc/dvm/$sp/info.gz";
+	if ($rev ge "5.0")	{ $spInfo = $dump_path . "proc/dvm/containers/$sp/info.gz"; }
+	else				{ $spInfo = $dump_path . "proc/dvm/$sp/info.gz"; }
 	
 	## Set path to dvmstat.gz file for system
 	$spDvmstat = $dump_path . "proc/dvm/dvmstat.gz";
 	
 	## Set path to dmstat.gz file for $SP
-	$dmstats = $dump_path . "proc/dvm/$sp/dmstats.gz";
+	if ($rev ge "5.0")	{ $dmstats = $dump_path . "proc/dvm/containers/$sp/dmstats.gz"; }
+	else				{ $dmstats = $dump_path . "proc/dvm/$sp/dmstats.gz"; }
 
 	## Get list of all info.gz files in proc
 	chomp(@info = `ls $proc`);
@@ -615,8 +619,7 @@ logger(__LINE__, "SAN is on 2.8 stack, 2.14 or earlier") if ($debug);
 logger(__LINE__, "Extracting $info...") if ($debug);
 
 		## Set base path for where info.gz will be extracted
-		@split3 = split /\./, $info;
-		$base = $split3[1];
+		$base = (split /\./, $info)[1];
 		$Base = "/Access." . $base;
 		$txt = $Base . ".txt";
 
@@ -629,15 +632,16 @@ logger(__LINE__, "Extracting $info...") if ($debug);
 
 	my_print("Extracting info files for each volume...");
 
-	## If unit is on 2.8v3+ or Christy
-	if ($rev eq "3.0" or $rev eq "3.1" or $rev eq "3.2" or $rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2") 
+	## If unit is on 2.8v3+ or Christy or 2610i
+	if ($rev eq "3.0" or $rev eq "3.1" or $rev eq "3.2" or $rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2" or $rev ge "5.0") 
 	{
 logger(__LINE__, "SAN is on 2.8v3+, extracting stat files...") if ($debug);
 
 		print "Extracting stats files for each volume...";
 		
 		## Set path to stats.gz files in proc
-		$stats = $dump_path . "proc/dvm/$sp/*/stats.gz";
+		if ($rev ge "5.0")	{ $stats = $dump_path . "proc/dvm/containers/$sp/volumes/*/stats.gz"; }
+		else				{ $stats = $dump_path . "proc/dvm/$sp/*/stats.gz"; }
 		
 		## Get list of all stats.gz files in proc
 		chomp(@stats = `ls $stats`);
@@ -646,8 +650,7 @@ logger(__LINE__, "SAN is on 2.8v3+, extracting stat files...") if ($debug);
 logger(__LINE__, "Extracting $stat...") if ($debug);
 			
 			## Set base path for where stats.gz will be extracted
-			@split4 = split /\./, $stat;
-			$base = $split4[1];
+			$base = (split /\./, $stat)[1];
 			$Base = "/Access." . $base;
 			$txt = $Base . ".txt";
 			
@@ -672,7 +675,7 @@ logger(__LINE__, "Extracting log file...") if ($debug);
 	my_print("Extracting container info file...", "Extracting container dvmstat file...");	
 	cmd_chk("Extracting container dvmstat file...","gzip -df $spDvmstat >> /dev/null 2>&1");
 	
-	if ($rev eq "3.2" or $rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2")
+	if ($rev eq "3.2" or $rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2" or $rev ge "5.0")
 	{
 		my_print("Extracting container dvmstat file...", "Extracting container dmstats file...");
 		cmd_chk("Extracting container dmstats file...","gzip -df $dmstats >> /dev/null 2>&1");
@@ -808,6 +811,12 @@ logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $d
 logger(__LINE__,"Starting 3500i analysis...") if ($debug);
 logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $dump_path\n\tinfo - $info\n\tdebug_dir - $debug_dir\n\tsp - $sp\n\tdebug - $debug\n\tspInfo - $spInfo\n\tspDvmstat - $spDvmstat\n\tdmstats - $dmstats\n\tssdAVL - $ssdAVL\n\tcon - $con\n\tiscsiSessionsFile - $iscsiSessionsFile") if ($debug);
 		system("Analysis3500 $file $dump_path $info $debug_dir $sp $debug $spInfo $spDvmstat $dmstats $ssdAVL $con $iscsiSessionsFile");
+	}
+	elsif ($rev ge "5.0")
+	{
+logger(__LINE__,"Starting 2610i analysis...") if ($debug);
+logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $dump_path\n\tinfo - $info\n\tdebug_dir - $debug_dir\n\tsp - $sp\n\tdebug - $debug\n\tspDvmstat - $spDvmstat\n\tdmstats - $dmstats\n\tssdAVL - $ssdAVL") if ($debug);
+		system("Analysis2610 $file $dump_path $info $debug_dir $sp $debug $spInfo $spDvmstat $dmstats $ssdAVL $iscsiSessionsFile");
 	}
 	else
 	{

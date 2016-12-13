@@ -801,6 +801,7 @@ logger(__LINE__,"Data Mover state is: $dmState") if ($debug);
 	print "Demotion Policy: $demo Days\n";
 	print "Promotion Policy: $promo Access\n\n";
 	
+	print $OUTPUT "Data Mover Status,$dmState\n";
 	print $OUTPUT "Current SRM Policies\n";
 	print $OUTPUT "Demo,$demo\n";
 	print $OUTPUT "Promo,$promo\n\n";
