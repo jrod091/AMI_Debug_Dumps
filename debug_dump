@@ -393,7 +393,7 @@ logger(__LINE__, "\$debug_dir is $debug_dir") if ($debug);
 	{ # path before Christy
 		$dump_path = $debug_dir . "/opt/Mono/Storage/dvmstat/Dump/clidump/";
 	} 
-	else { # path in Christy
+	else { # path in Christy and beyond
 		$dump_path = $debug_dir . "/clidump/";
 	}
 logger(__LINE__, "debug dump path is $dump_path") if ($debug);
