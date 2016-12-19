@@ -1,0 +1,841 @@
+#!/usr/bin/perl
+
+## Debug variable - 0 = disabled, 1 = enabled
+$debug = 1;
+
+use File::Path qw(make_path remove_tree);
+use Net::FTP;
+use Text::Table;
+use Math::Round;
+use Email::Stuffer;
+
+logger(__LINE__, "===============================================================================================") if ($debug);
+## Setup variables for accessing FTP site
+$host = "ftpoem.ami.com";
+logger(__LINE__, "Hostname is $host") if ($debug);
+$user = "debugdump\@stortrends";
+logger(__LINE__, "User is $user") if ($debug);
+$pass = "CgndU7KF";
+logger(__LINE__, "Password is $pass") if ($debug);
+$main_path = "/Access.Share/support/Debug_Dumps/";
+logger(__LINE__, "Base path is $main_path") if ($debug);
+logger(__LINE__, "Commencing script...") if ($debug);
+logger(__LINE__, "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv") if ($debug);
+
+## Open connection to FTP site and login
+$f = Net::FTP->new($host, Debug =>0) or die "Can't open $host: $@\n";
+logger(__LINE__, "Opening connection to $host...") if ($debug);
+$f->login($user, $pass) or die "Can't login $user\n";
+logger(__LINE__, "Logging in with $user and $pass...\n") if ($debug);
+
+## Get a list of customer directories found on FTP site
+@customers = $f->ls;
+CUSTOMER: foreach $dir (@customers) 
+{
+	if ($dir !~ /\./) 
+	{
+logger(__LINE__, "*** Working on [$dir] ***") if ($debug);
+		
+		## Set path to customer's local directory
+		$localdir = $main_path . $dir . "/";
+logger(__LINE__, "Local directory set as $localdir") if ($debug);
+
+		## Create customer's local directory if not found
+		if (! -d $localdir)
+		{
+logger(__LINE__, "$localdir does not exist, creating...") if ($debug);
+			make_path($localdir);
+		}
+		
+		## Get list of local debug dumps currently found in customers' directory
+		@tars = `ls ${localdir}*debug\*gz 2>/dev/null`;
+
+
+		($check_hr, $check_mday, $check_month, $check_yr, $check_dst) = (0,0,0,0,0);
+			
+		foreach $tar (@tars) 
+		{
+logger(__LINE__, "-_-_-_-_-_-_-_-_-_-_-_-_-") if ($debug);
+
+			chomp($tar);
+logger(__LINE__, "Current tar is $tar") if ($debug);
+			$local_dd_epoch = (stat($tar))[9];
+logger(__LINE__, "Epoch of $tar is $local_dd_epoch") if ($debug);
+			($Sec, $Min, $Hour, $Mday, $Month, $Year, $isDST) = (localtime($local_dd_epoch))[0,1,2,3,4,5,8];
+			
+			$Year += 1900;
+logger(__LINE__, "Timestamp for $tar is $Month/$Mday/$Year $Hour:$Min:$Sec") if ($debug);
+			
+			## Set timestamp of local debug dump
+			if ($Year >= $check_yr)
+			{
+				$lyear = $Year;
+				$check_yr = $lyear;
+logger(__LINE__, "Year of local debug dump is $check_yr") if ($debug);
+				
+				if ($isDST != $check_dst)
+				{
+					$lisDST = $isDST;
+					$check_dst = $lisDST;
+				}
+				
+				if ($Month >= $check_month)
+				{
+					$lmonth = $Month;
+					$check_month = $lmonth;
+logger(__LINE__, "Month of local debug dump is $check_month") if ($debug);
+
+					if ($Mday >= $check_mday)
+					{
+						$lmday = $Mday;
+						$lhour = $Hour;
+						$lmin = $Min;
+						$lsec = $Sec;
+						$check_mday = $lmday;
+logger(__LINE__, "Day of local debug dump is $lmday") if ($debug);
+logger(__LINE__, "Hour of local debug dump is $lhour") if ($debug);
+logger(__LINE__, "Min of local debug dump is $lmin") if ($debug);
+logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+					}
+				}
+				else
+				{
+					$check_month = $lmonth;
+logger(__LINE__, "Month of local debug dump is $check_month") if ($debug);
+				}
+			}
+logger(__LINE__, "_-_-_-_-_-_-_-_-_-_-_-_-_") if ($debug);
+		}
+		
+		## Enter the customer's directory on the FTP site and get list of current debug dumps found
+logger(__LINE__, "Changing directory in FTP to $dir...") if ($debug);
+
+		# Check to see if FTP session has timed out
+		if (not eval { $f->cwd($dir) })
+		{
+			$f = Net::FTP->new($host, Debug =>0) or die "Can't open $host: $@\n";
+			logger(__LINE__, "Opening connection to $host...") if ($debug);
+			$f->login($user, $pass) or die "Can't login $user\n";
+			logger(__LINE__, "Logging in with $user and $pass...\n") if ($debug);
+			$f->cwd($dir) or die "Can't cwd to $dir\n";
+		}
+		
+		@files = $f->ls;
+
+		$i = 0;
+		$check = 0;
+
+		foreach $file (@files) 
+		{
+			if ($file =~ /^debug/ and $file =~ /\.gz$/) 
+			{
+logger(__LINE__, "^^^^^^^^^^^^^^^^^^^^^^^^^") if ($debug);
+logger(__LINE__, "Current file is $file") if ($debug);
+
+				## Get epoch of each debug dump
+				$dd_epoch = $f->mdtm($file);
+logger(__LINE__, "Epoch of $file is $dd_epoch") if ($debug);
+
+				## Get timestamp of each debug dump
+				($csec, $cmin, $chour, $cmday, $cmonth, $cyear, $cisdst) = (localtime($dd_epoch))[0,1,2,3,4,5,8];
+				$cyear += 1900;
+logger(__LINE__, "Timestamp of $file is $cmonth/$cmday/$cyear $chour:$cmin:$csec") if ($debug);
+logger(__LINE__, "[local][current]:[$lmonth,$lmday,$lyear,$lhour,$lmin,$lsec][$cmonth,$cmday,$cyear,$chour,$cmin,$csec]");
+			
+				## Compare timestamps to see if debug dumps are newer and pull them if so
+				if ($cyear > $lyear) 
+				{
+logger(__LINE__, "$cyear is greater than $lyear, therefore more recent, pulling $file...") if ($debug);
+					$f->binary();
+					$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
+					$Files[$i] = $file;
+					$check++;
+					$i++;
+				} 
+				elsif ($cyear == $lyear) 
+				{
+					if ($cmonth > $lmonth) 
+					{
+logger(__LINE__, "Years are equal, but $cmonth is greater than $lmonth, therefore more recent, pulling $file...") if ($debug);
+						$f->binary();
+						$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
+						$Files[$i] = $file;
+						$check++;
+						$i++;
+					} 
+					elsif ($cmonth == $lmonth) 
+					{
+						if ($cmday > $lmday) 
+						{
+logger(__LINE__, "Years and months are equal, but $cmday is greater than $lmday, therefore more recent, pulling $file...") if ($debug);
+							$f->binary();
+							$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
+							$Files[$i] = $file;
+							$check++;
+							$i++;
+						} 
+						elsif ($cmday == $lmday) 
+						{
+							if ($chour > $lhour) 
+							{
+logger(__LINE__, "Years, months and days are equal, but $chour is greater than $lhour, therefore more recent, pulling $file...") if ($debug);
+								$f->binary();
+								$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
+								$Files[$i] = $file;
+								$check++;
+								$i++;
+							} 
+							elsif ($chour == $lhour) 
+							{
+								if ($cmin > $lmin) 
+								{
+logger(__LINE__, "Years, months, days, and hours are equal, but $cmin is greater than $lmin, therefore more recent, pulling $file...") if ($debug);
+									$f->binary();
+									$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
+									$Files[$i] = $file;
+									$check++;
+									$i++;
+								} 
+								elsif ($cmin == $lmin) 
+								{
+									if ($csec > $lsec) 
+									{
+logger(__LINE__, "Years, months, days, hours and minutes are equal, but $csec is greater than $lsec, therefore more recent, pulling $file...") if ($debug);
+										$f->binary();
+										$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
+										$Files[$i] = $file;
+										$check++;
+										$i++;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+		$z = $i -1 if ($debug);
+logger(__LINE__, "Current count is $z and file is $Files[$z]") if ($debug);
+logger(__LINE__, "vvvvvvvvvvvvvvvvvvvvvvvvv") if ($debug);
+		}
+
+		if ($check <= 0)
+		{
+logger(__LINE__, "No new files, going on to next customer...") if ($debug);
+logger(__LINE__, "*** Done working on [$dir] ***\n") if ($debug);
+logger(__LINE__, "===============================================================================================") if ($debug);
+			$f->cwd("/") or die "Cant cwd to '/'\n";
+			next CUSTOMER;
+		}
+		else { $f->cwd("/") or die "Can't cwd to '/'\n"; }
+	}
+	else { logger(__LINE__, "current \$dir is not a directory: $dir") if ($debug); next CUSTOMER; }
+	
+	#######################################################################################################################
+	# Debug Dump Extraction Section                                                                                       #
+	# ------------------------------------------------------------------------------------------------------------------- #
+	#                                                                                                                     #
+	# The section below will extract all debug dumps pulled from the FTP Pull Section above. The following information    #
+	# will be executed:                                                                                                   #
+	# 1. extract events_txt.gz to events.txt                                                                              #
+	# 2. extract latest messages.gz to messages.txt                                                                       #
+	# 3. extract dvmstat.tgz to dvmstat/ and add proper .swf files                                                        #
+	# 4. extract info file from each volume                                                                               #
+	# 5. if 2.8v3.00+, extract stats file from each volume                                                                #
+	# 6. extract stats file from storage pool                                                                             #
+	#######################################################################################################################
+
+MAIN:	foreach $file (@Files) {
+		## Set variables
+logger(__LINE__, "*************************") if ($debug);
+logger(__LINE__, "\$file is $file") if ($debug);
+		my $fpath = $localdir.$file;
+logger(__LINE__, "\$fpath is $fpath") if ($debug);
+		my $tmp = (split /\./, $file)[0];
+logger(__LINE__, "\$tmp is $tmp") if ($debug);
+		my $debug_dir = $localdir.$tmp;
+logger(__LINE__, "\$debug_dir is $debug_dir") if ($debug);
+		
+		## Check to see if the debug dump file is from a dual controller unit
+		if($fpath =~ /lc/i || $fpath =~ /rc/i) {
+
+			## Make directory for debug dump
+logger(__LINE__, "making path for $debug_dir...") if ($debug);
+			make_path($debug_dir);
+			
+			## Extract debug dump to debug dump directory
+			$err = `tar -zxf $fpath -C $debug_dir 2>&1`;
+			
+			if ($err =~ /error/i)
+			{
+				if ($err !~ /httpd_error_log/i)
+				{
+					system("unzip -P itx_unlock_ami $fpath -d $debug_dir >> /dev/null");
+					system("tar -zxf $debug_dir/opt/Mono/Storage/dvmstat/Dump/$file -C $debug_dir");
+					system("rm -rf $debug_dir/opt/");
+				}
+			}
+			
+		if ( -d "$debug_dir/opt/Mono/Storage/dvmstat/Dump/clidump/" )
+		{ # path before Christy
+			$dump_path = $debug_dir . "/opt/Mono/Storage/dvmstat/Dump/clidump/";
+		} 
+		else { # path in Christy and beyond
+			$dump_path = $debug_dir . "/clidump/";
+		}
+logger(__LINE__, "debug dump path is $dump_path") if ($debug);
+
+		## Set path variable for serverinfo.txt
+		$info = $dump_path . "serverinfo.txt";
+logger(__LINE__,"\$info is $info") if ($debug);
+
+		## Get revision number of system in order to know which resources to copy
+		chomp($ver = `grep --color=never Version $info | awk '{print \$5}'`);
+logger(__LINE__,"\$ver is $ver") if ($debug);
+		chomp($rev = `grep --color=never Revision $info | awk '{print \$5}'`);
+logger(__LINE__,"\$rev is $rev") if ($debug);
+		
+		## Set dvmstat, events, and messages variables
+		$arc1 = "dvmstat.tgz";
+		$dir1 = "dvmstat";
+		if ($ver =~ /5/ and $rev ge "1.1")	{ $arc2 = "events.txt.gz"; }
+		else								{ $arc2 = "events_txt.gz"; }
+logger(__LINE__,"\$arc2 is $arc2") if ($debug);
+		$arc3 = "messages.gz";
+		$arc4 = "log.gz";
+
+		## Add dvmstat, events, and messages variables to path
+		$a = $dump_path . $arc1;
+		$b = $dump_path . $arc2;
+		$c = $dump_path . $arc3;
+		$d = $dump_path . $dir1;
+		$e = $dump_path . "events_txt";
+		$f = $dump_path . "events.txt";
+		$g = $dump_path . "messages";
+		$h = $dump_path . "messages.txt";
+
+		## Make directory for dvmstat
+logger(__LINE__, "Making path for $d...") if ($debug);
+		make_path($d);
+		
+		## Extract dvmstat.tgz to dvmstat directory
+logger(__LINE__, "Extracting dvmstat.tgz...") if ($debug);
+		system("tar -xzf $a -C $d >> /dev/null 2>&1");
+		
+		## Extract event log
+logger(__LINE__, "Extracting event log...") if ($debug);
+		system("gzip -df $b >> /dev/null 2>&1");
+
+		## Move events_txt to events.txt for easier opening options in Windows
+logger(__LINE__, "Moving events_txt to events.txt...") if ($debug);
+		if ($rev ne "1.2") { system "mv $e $f >> /dev/null 2>&1"; }
+
+		## Extract messages
+logger(__LINE__, "Extracting messages...") if ($debug);
+		system("gzip -df $c >> /dev/null 2>&1");
+
+		## Move messages to messages.txt for easier opening options in Windows
+logger(__LINE__, "Moving messages to messages.txt...") if ($debug);
+		system "mv $g $h >> /dev/null 2>&1";
+
+		## Set path variables for xml, Storage, and dvmstat within dvmstat directory
+		$xml = $dump_path . "dvmstat/opt/Mono/xml/";
+		$Storage = $dump_path . "dvmstat/opt/Mono/Storage/";
+		$dvmstat = $Storage . "dvmstat/";
+
+		## Create path variables for source paths to .swf files and resources for both 2.8v2.14, 2.8v3+, and 5.0v1.0
+		$v501 = "/Access.Share/support/MT_Debug_Flash/50v1/Mono/";
+		$v283 = "/Access.Share/support/MT_Debug_Flash/28v3/Mono/";
+		$v282 = "/Access.Share/support/MT_Debug_Flash/28v2/Mono/";
+
+		## If unit is on 5.0v1.0
+		if($rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2") {
+logger(__LINE__, "SAN is on Christy stack") if ($debug);
+			
+			## Create path variables for xml and Storage from source path
+			$XML = $v501 . "xml/";
+logger(__LINE__,"\$XML is $XML") if ($debug);
+			$STORAGE = $v501 . "Storage/";
+logger(__LINE__,"\$STORAGE is $STORAGE") if ($debug);
+			
+			## Get all .swf files from source path
+			@swf = `ls $STORAGE | grep --color=never swf`;
+			
+			## Set path to iscsistats.xml from source path
+			$iscsistats = $STORAGE . "dvmstat/iscsistats.xml";
+logger(__LINE__,"\$iscsistats is $iscsistats") if ($debug);
+			
+			## Make xml directory in local dvmstat directory
+logger(__LINE__, "Making $xml...") if ($debug);
+			make_path($xml);
+			
+			## Copy xml directory from source path to local path
+logger(__LINE__, "Copying $XML to $dump_path/dvmstat/opt/Mono/...") if ($debug);
+			system "cp -r $XML $dump_path/dvmstat/opt/Mono/ >> /dev/null 2>&1";
+
+			## Copy .swf files from source path to local path
+logger(__LINE__, "Copying .swf files...") if ($debug);
+			foreach $swf (@swf) {
+				chomp($swf);
+logger(__LINE__,"\$swf is $swf") if ($debug);
+logger(__LINE__,"copying $STORAGE$swf to $Storage...") if ($debug);
+				system "cp $STORAGE$swf $Storage >> /dev/null 2>&1";
+			}
+
+			## Copy iscsistats.xml from source path to local path
+logger(__LINE__, "Copying $iscsistats to $dvmstat...") if ($debug);
+			system "cp $iscsistats $dvmstat >> /dev/null 2>&1";
+			
+			##Set path to containeroutput.txt
+			$con = $dump_path . "containeroutput.txt";
+logger(__LINE__,"\$con is $con") if ($debug);
+			
+			## Get storage pool name
+			chomp($sp = `grep --color=never Name $con | awk '{print \$4}'`);
+logger(__LINE__,"stroage pool is $sp") if ($debug);
+			
+			if ($sp eq "")	{ next MAIN; }
+			
+			## Create containers.xml and volumes.xml
+logger(__LINE__, "Creating containers.xml and volumes.xml...") if ($debug);
+			open(FILE, ">>$dump_path/dvmstat/opt/Mono/Storage/dvmstat/containers.xml");
+				print FILE "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+				print FILE "<set>\n";
+				print FILE "\t<string>$sp\_local<\/string>\n";
+				print FILE "<\/set>";
+			close(FILE);
+			
+			open(FILE, ">>$dump_path/dvmstat/opt/Mono/Storage/dvmstat/volumes.xml");
+				print FILE "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+				print FILE "<set>\n";
+				@name = `grep --color=never -i -e "volume name" ${dump_path}volumeoutput.txt | awk '{print \$4}'`;
+				foreach $name (@name) {
+					$name =~ s/^\s+|\s+$//g;
+					print FILE "\t<string>$sp\_$name\_local<\/string>\n";
+				}
+				print FILE "<\/set>";
+				close(FILE);
+		
+		  ## If unit is on 2.8v3.0 or 3.1
+		} 
+		elsif ($rev eq "3.0" or $rev eq "3.1" or $rev eq "3.2") {
+logger(__LINE__, "SAN is on 2.8 stack (3+)") if ($debug);
+
+			## Create path variables for xml and Storage from source path
+			$XML = $v283 . "xml/";
+			$STORAGE = $v283 . "Storage/";
+			
+			## Get all .swf files from source path
+			@swf = `ls $STORAGE | grep --color=never swf`;
+			
+			## Set path to iscsistats.xml from source path
+			$iscsistats = $STORAGE . "dvmstat/iscsistats.xml";
+			
+			## Make xml directory in local dvmstat directory
+			make_path($xml);
+			
+			## Copy xml directory from source path to local path
+logger(__LINE__, "cp -r $XML  $dump_path/dvmstat/opt/Mono/ >> /dev/null 2>&1") if ($debug);
+			system "cp -r $XML $dump_path/dvmstat/opt/Mono/ >> /dev/null 2>&1";
+
+			## Copy .swf files from source path to local path
+			foreach $swf (@swf) {
+				chomp($swf);
+logger(__LINE__, "Current file is $swf") if ($debug);
+				system "cp $STORAGE$swf $Storage >> /dev/null 2>&1";
+			}
+
+			## Copy iscsistats.xml from source path to local path
+			system "cp $iscsistats $dvmstat >> /dev/null 2>&1";
+
+		  ## If unit is on 2.8v2.14 or earlier
+		} 
+		else {
+logger(__LINE__, "SAN is on 2.8 stack, 2.14 or earlier") if ($debug);
+
+			## Create path variables for xml and Storage from source path
+			$XML = $v282 . "xml/";
+			$STORAGE = $v282 . "Storage/";
+			
+			## Get all .swf files from source path
+			@swf = `ls $STORAGE | grep --color=never swf`;
+			
+			## Make xml directory in local dvmstat directory
+			system "mkdir $xml >> /dev/null 2>&1";
+			
+			## Copy xml directory from source path to local path
+			system "cp -r $XML $dump_path/dvmstat/opt/Mono/ >> /dev/null 2>&1";
+
+			## Copy .swf files from source path to local path
+			foreach $swf (@swf) {
+				chomp($swf);
+				system "cp $STORAGE$swf $Storage >> /dev/null 2>&1";
+			}
+
+		}
+		
+		##Set path to containeroutput.txt
+		$con = $dump_path . "containeroutput.txt";
+logger(__LINE__,"\$con is $con") if ($debug);
+
+		## Get storage pool name
+		chomp($sp = `grep --color=never Name $con | awk '{print \$4}'`);
+logger(__LINE__,"\$sp is $sp") if ($debug);
+		
+		if ($sp eq "") { next MAIN; }
+		
+		## Set path to log.gz file
+		if ($rev ge "5.0")	{ $log = $dump_path . "proc/dvm/containers/$sp/log.gz"; }
+		else				{ $log = $dump_path . "proc/dvm/$sp/log.gz"; }
+		
+		## Set path to stats.gz for $SP
+		if ($rev ge "5.0")	{ $stat = $dump_path . "proc/dvm/containers/$sp/stats.gz"; }
+		else				{ $stat = $dump_path . "proc/dvm/$sp/stats.gz"; }
+
+		## Set path to info.gz files
+		if ($rev ge "5.0")	{ $proc = $dump_path . "proc/dvm/containers/$sp/volumes/*/info.gz"; }
+		else				{ $proc = $dump_path . "proc/dvm/$sp/*/info.gz"; }
+		
+		## Set path to info.gz file for $SP
+		if ($rev ge "5.0")	{ $spInfo = $dump_path . "proc/dvm/containers/$sp/info.gz"; }
+		else				{ $spInfo = $dump_path . "proc/dvm/$sp/info.gz"; }
+		
+		## Set path to dvmstat.gz file for system
+		$spDvmstat = $dump_path . "proc/dvm/dvmstat.gz";
+		
+		## Set path to dmstat.gz file for $SP
+		if ($rev ge "5.0")	{ $dmstats = $dump_path . "proc/dvm/containers/$sp/dmstats.gz"; }
+		else				{ $dmstats = $dump_path . "proc/dvm/$sp/dmstats.gz"; }
+
+		## Get list of all info.gz files in proc
+		chomp(@info = `ls $proc`);
+
+		## Run through loop for each file in the info array
+		foreach $info (@info) {
+logger(__LINE__, "Extracting $info...") if ($debug);
+
+			## Set base path for where info.gz will be extracted
+			$base = (split /\./, $info)[1];
+			$Base = "/Access." . $base;
+			$txt = $Base . ".txt";
+
+			## Extract info
+			system "gzip -df $info >> /dev/null 2>&1";
+
+			## Move info to info.txt for easier opening options in Windows
+			system "mv $Base $txt >> /dev/null 2>&1";
+		}
+
+		## If unit is on 2.8v3+ or Christy or 2610i
+		if ($rev eq "3.0" or $rev eq "3.1" or $rev eq "3.2" or $rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2" or $rev ge "5.0") 
+		{
+logger(__LINE__, "SAN is on 2.8v3+, extracting stat files...") if ($debug);
+			
+			## Set path to stats.gz files in proc
+			if ($rev ge "5.0")	{ $stats = $dump_path . "proc/dvm/containers/$sp/volumes/*/stats.gz"; }
+			else				{ $stats = $dump_path . "proc/dvm/$sp/*/stats.gz"; }
+			
+			## Get list of all stats.gz files in proc
+			chomp(@stats = `ls $stats`);
+			
+			foreach $stat (@stats) {
+logger(__LINE__, "Extracting $stat...") if ($debug);
+				
+				## Set base path for where stats.gz will be extracted
+				$base = (split /\./, $stat)[1];
+				$Base = "/Access." . $base;
+				$txt = $Base . ".txt";
+				
+				## Extract stats
+				system "gzip -df $stat >> /dev/null 2>&1";
+				
+				## Move stats to stats.txt for easier opening options in Windows
+				system "mv $Base $txt >> /dev/null 2>&1";
+			}
+	}
+		
+logger(__LINE__, "Extracting log file...") if ($debug);
+		
+		system("gzip -df $log 2>/dev/null");	
+		system("gzip -df $stat >> /dev/null 2>&1");
+		system("gzip -df $spInfo >> /dev/null 2>&1");
+		system("gzip -df $spDvmstat >> /dev/null 2>&1");
+		
+		if ($rev eq "3.2" or $rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2" or $rev ge "5.0")
+		{
+			system("gzip -df $dmstats >> /dev/null 2>&1");
+		}
+
+logger(__LINE__, "Changing permissions of $debug_dir...") if ($debug);
+		system "chmod -R 777 $debug_dir";
+		
+		}
+		else {
+			
+			## set iTX version to 2.7
+			$ver = "2.7";
+
+			## Make directory for debug dump
+			make_path($debug_dir);
+
+			## Extract debug dump to debug dump directory
+			system("tar -zxf $fpath -C $debug_dir >> /dev/null 2>&1");
+
+			## Set path variable for location of all files in debug dump
+			$dump_path = $debug_dir . "/opt/Mono/Storage/dvmstat/Dump/clidump/";
+
+			## Set dvmstat, events, and messages variables
+			$arc1 = "dvmstat.tgz";
+			$dir1 = "dvmstat";
+			$arc2 = "events_txt.gz";
+			$arc3 = "messages.gz";
+
+			## Add dvmstat, events, and messages variables to path
+			$a = $dump_path . $arc1;
+			$b = $dump_path . $arc2;
+			$c = $dump_path . $arc3;
+			$d = $dump_path . $dir1;
+			$e = $dump_path . "events_txt";
+			$f = $dump_path . "events.txt";
+			$g = $dump_path . "messages";
+			$h = $dump_path . "messages.txt";
+
+			## Make directory for dvmstat
+logger(__LINE__, "Making path for $d...") if ($debug);
+			make_path($d);
+
+			## Extract dvmstat.tgz to dvmstat directory
+logger(__LINE__, "Extracting dvmstat.tgz...") if ($debug);
+			system("tar -xzf $a -C $d >> /dev/null 2>&1");
+
+			## Extract event log
+logger(__LINE__, "Extracting event log...") if ($debug);
+			system("gzip -df $b >> /dev/null 2>&1");
+
+			## Move events_txt to events.txt for easier opening options in Windows
+logger(__LINE__, "Moving events_txt to events.txt...") if ($debug);
+			system "mv $e $f >> /dev/null 2>&1";
+
+			## Extract messages
+logger(__LINE__, "Extracting messages...") if ($debug);
+			system("gzip -df $c >> /dev/null 2>&1");
+
+			## Move messages to messages.txt for easier opening options in Windows
+logger(__LINE__, "Moving messages to messages.txt...") if ($debug);
+			system "mv $g $h >> /dev/null 2>&1";
+		
+			## Create path variable for location that .swf files need to go to in 2.7
+			$Storage = $path . "dvmstat/opt/Mono/Storage/";
+
+			## Create path variables for source paths to .swf files and resources for 2.7
+			$v27 = "/Access.Share/support/MT_Debug_Flash/27/";
+		
+			## Get all .swf files from source path
+			@swf = `ls $v27 | grep --color=never swf`;
+
+			## Copy .swf files from source path to local path
+			foreach $swf (@swf) {
+				chomp($swf);
+				system "cp $STORAGE$swf $Storage >> /dev/null 2>&1";
+			}
+		}
+		
+	#######################################################################################################################
+	# Debug Dump Analysis Section                                                                                         #
+	# ------------------------------------------------------------------------------------------------------------------- #
+	#                                                                                                                     #
+	# The section below will run an analysis on all debug dumps pulled from the FTP Pull Section above. The following will#
+	# be captured:                                                                                                        #
+	#  1. Volume Names in System                                                                                          #
+	#  2. Volume Provisioned Size                                                                                         #
+	#  3. Volume Provision Type                                                                                           #
+	#  4. Volume Tier Residency                                                                                           #
+	#  5. Volume SSD Cache Profile                                                                                        #
+	#  6. Drive Type Latencies (SSD, SAS, NL-SAS)                                                                         #
+	#  7. Read, Write, & Total MB/s of each Volume                                                                        #
+	#  8. Used Capacity of each Volume                                                                                    #
+	#  9. SSD Cache capacities (valid reads, dirty writes)                                                                #
+	# 10. Get Tier Allocation Blocks Written Information                                                                  #
+	# 11. Get Drive SMART information                                                                                     #
+	#######################################################################################################################
+
+logger(__LINE__,"`````````````````````````") if ($debug);
+
+		## no analysis for iTX 2.7
+		if ($ver eq "2.7")		
+		{ 
+logger(__LINE__,"system on 2.7, moving to next debug dump...") if ($debug); 
+			next MAIN; 
+		}
+		
+		$ProdDef = $dump_path . "ProdDef.txt";												logger(__LINE__,"ProdDef is $ProdDef") if ($debug);
+		$productName = `grep -i --color=never 'distro' $ProdDef`;							logger(__LINE__,"ProductName is $productName") if ($debug);
+		## for 2.8v2.14 no ProdDef.txt exists, so manually set...
+		if ($productName eq "") { $productName = "FC11"; }
+		
+		chomp($ssd = `grep --color=never Tier $dump_path/license.txt | awk '{print \$3}'`);	logger(__LINE__,"cache setting is $ssd") if ($debug);
+		$spInfo =~ s/.gz//;																	logger(__LINE__,"spInfo is $spInfo") if ($debug);
+		$spDvmstat =~ s/.gz//;																logger(__LINE__,"spDVMstat is $spDvmstat") if ($debug);
+		$dmstats =~ s/.gz//;																logger(__LINE__,"dmstats is $dmstats") if ($debug);
+		$ssdAVL = "/Access.Share/support/MT_Debug_Flash/ssd_avl_list.csv";					logger(__LINE__,"AVL is at $ssdAVL") if ($debug);
+		$iscsiSessionsFile = $dump_path."/iscsi/proc/scsi_target/iscsi_target/sessions";	logger(__LINE__, "iscsiSessionsFile is at $iscsiSessionsFile") if ($debug);
+		
+		if ($productName =~ /FC11/ and $ssd eq "Disabled")
+		{
+logger(__LINE__,"Starting 3400i analysis...") if ($debug);
+logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $dump_path\n\tinfo - $info\n\tdebug_dir - $debug_dir\n\tsp - $sp\n\tdebug - $debug\n\tspDvmstat - $spDvmstat") if ($debug);
+			system("Analysis3400 $file $dump_path $info $debug_dir $sp $debug $spDvmstat >> /dev/null 2>&1");
+		}
+		elsif ($productName =~ /FC11/ and $ssd eq "Enabled")
+		{
+logger(__LINE__,"Starting 3500i analysis...") if ($debug);
+logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $dump_path\n\tinfo - $info\n\tdebug_dir - $debug_dir\n\tsp - $sp\n\tdebug - $debug\n\tspInfo - $spInfo\n\tspDvmstat - $spDvmstat\n\tdmstats - $dmstats\n\tssdAVL - $ssdAVL\n\tcon - $con\n\tiscsiSessionsFile - $iscsiSessionsFile") if ($debug);
+			system("Analysis3500 $file $dump_path $info $debug_dir $sp $debug $spInfo $spDvmstat $dmstats $ssdAVL $con $iscsiSessionsFile >> /dev/null 2>&1");
+		}
+		elsif ($rev ge "5.0")
+		{
+logger(__LINE__,"Starting 2610i analysis...") if ($debug);
+logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $dump_path\n\tinfo - $info\n\tdebug_dir - $debug_dir\n\tsp - $sp\n\tdebug - $debug\n\tspDvmstat - $spDvmstat\n\tdmstats - $dmstats\n\tssdAVL - $ssdAVL") if ($debug);
+			system("Analysis2610 $file $dump_path $info $debug_dir $sp $debug $spInfo $spDvmstat $dmstats $ssdAVL $iscsiSessionsFile >> /dev/null 2>&1");
+		}
+		else
+		{
+logger(__LINE__,"Starting Christy analysis...") if ($debug);
+logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $dump_path\n\tinfo - $info\n\tdebug_dir - $debug_dir\n\tsp - $sp\n\tdebug - $debug\n\tspInfo - $spInfo\n\tspDvmstat - $spDvmstat\n\tdmstats - $dmstats\n\tssdAVL - $ssdAVL\n\tiscsiSessionsFile - $iscsiSessionsFile") if ($debug);
+			system("AnalysisChristy $file $dump_path $info $debug_dir $sp $debug $spInfo $spDvmstat $dmstats $ssdAVL $iscsiSessionsFile >> /dev/null 2>&1");
+		}
+		
+		# Email results to StorTrends Support	
+		if ($debug_dir =~ /.+-([\d]+)-([\d]+)/)
+		{
+			$debugDate = $1;
+			$debugTime = $2;
+		}
+		
+		$from    = 'debugdumps@stortrends.com';
+logger(__LINE__,"Email is being sent from: $from") if ($debug);
+		$to      = 'jorger@ami.com';
+logger(__LINE__,"Email is being sent to: $to") if ($debug);
+		$subject = "New Debug Dump Analysis Available for [$dir]";
+logger(__LINE__,"Email subject is: $subject") if ($debug);
+		$body    = "Attached is the Analysis for ${dir}'s debug dump: $file\n\n\nCheers!\nDebug Dump Analysis Team";
+logger(__LINE__,"Email body is: $body") if ($debug);
+		$attach  = $debug_dir . "/analysis/analysis-$debugDate-$debugTime.csv";
+logger(__LINE__,"Email attachement is: $attach") if ($debug);
+		
+		Email::Stuffer->to($to)
+					  ->from($from)
+					  ->subject($subject)
+					  ->text_body($body)
+					  ->attach_file($attach)
+					  ->send;
+logger(__LINE__,"Email Sent.") if ($debug);
+		
+logger(__LINE__, "===============================================================================================") if ($debug);
+	}
+	
+logger(__LINE__, "*** Done working on [$dir] *** \n") if ($debug);
+	undef @Files;
+	
+}
+
+#---------------------------------------------------------------------------------------------------------------------#
+
+## Debug subroutine
+sub logger
+{
+	($line,$msg) = @_;
+	
+	@months = qw( Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec );
+	@days = qw( Sun Mon Tue Wed Thu Fri Sat );
+	
+	($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = localtime();
+	$year += 1900;
+	$mon += 1;
+	
+	$logFile = "/var/log/debugDump.log";
+	
+	open(LOG, ">>", $logFile);
+	print LOG "auto_debug_dump: Line $line $mon/$mday/$year $hour:$min:$sec - $msg\n";
+	close(LOG);
+	
+	rotate($logFile,$mon,$mday,$year,$hour,$min,$sec);
+}
+
+sub rotate
+{
+	($logFile,$month,$day,$year,$hour,$min,$sec) = @_;
+	
+	$maxSize = 1_048_576; # 1 MiB
+	$maxLogs = 5;
+	$archiveTotal = 5;
+	$date = $month.$day.$year."-".$hour.$min.$sec;
+	$maxLog = $logFile.$maxLogs;
+	$logDir = "/var/log/";
+	
+	if (-s $logFile > $maxSize)
+	{
+		for ($i = $maxLogs; $i > 0; $i--)
+		{
+			if (-e "${logFile}.$i")
+			{
+				$j = $i + 1;
+				rename "${logFile}.$i", "${logFile}.$j";
+			}
+		}
+		
+		rename "$logFile", "${logFile}.1";
+		unlink $logFile;
+		system("touch $logFile");
+		
+		
+		if (-e "${logFile}.$maxLogs")
+		{
+			$tarName = "${logFile}.${date}";
+			$tarFile = "${tarName}".".tar";
+			
+			rename "${logFile}.${maxLogs}", $tarName;
+			system("tar czf $tarFile $tarName 2>/dev/null");
+			unlink $tarName;
+			system("gzip $tarFile");
+		}		
+		
+		opendir(DIR, $logDir) or die "Can't open '$logDir': $!\n";
+		
+		while ($fi = readdir(DIR))
+		{
+			next unless (-f "$logDir/$fi");
+			next unless ($fi =~ m/\.tar.gz$/);
+			undef @match;
+			@match = grep { /$fi/ } @gzip;
+			if (not defined @match)
+			{
+				push(@gzip, $fi);
+			}			
+		}
+		
+		$pos = 0;
+		$archiveCheck = scalar(@gzip);
+		$lastCheck = 999999999999;
+		
+		if ($archiveCheck > $archiveTotal)
+		{
+			foreach $gz (@gzip)
+			{
+				$path = $logDir.$gz;
+				$timeCheck = (stat($path))[9];
+				if ($timeCheck < $lastCheck)
+				{
+					$lastCheck = $timeCheck;
+					$useThisGZip = $logDir.$gz;
+					$useThisPos = $pos;
+				}
+				$pos++;
+			}
+		
+			splice @gzip, $useThisPos, 1;
+			
+			unlink $useThisGZip;
+		}
+	}
+}
