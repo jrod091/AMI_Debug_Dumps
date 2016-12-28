@@ -9,18 +9,18 @@ use Text::Table;
 use Math::Round;
 use Email::Stuffer;
 
-logger(__LINE__, "===============================================================================================") if ($debug);
+logger(__LINE__, "===============================================================================================\n") if ($debug);
 ## Setup variables for accessing FTP site
 $host = "ftpoem.ami.com";
-logger(__LINE__, "Hostname is $host") if ($debug);
+#logger(__LINE__, "Hostname is $host") if ($debug);
 $user = "debugdump\@stortrends";
-logger(__LINE__, "User is $user") if ($debug);
+#logger(__LINE__, "User is $user") if ($debug);
 $pass = "CgndU7KF";
-logger(__LINE__, "Password is $pass") if ($debug);
+#logger(__LINE__, "Password is $pass") if ($debug);
 $main_path = "/Access.Share/support/Debug_Dumps/";
-logger(__LINE__, "Base path is $main_path") if ($debug);
-logger(__LINE__, "Commencing script...") if ($debug);
-logger(__LINE__, "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv") if ($debug);
+#logger(__LINE__, "Base path is $main_path") if ($debug);
+#logger(__LINE__, "Commencing script...") if ($debug);
+#logger(__LINE__, "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv") if ($debug);
 
 ## Open connection to FTP site and login
 $f = Net::FTP->new($host, Debug =>0) or die "Can't open $host: $@\n";
@@ -38,7 +38,7 @@ logger(__LINE__, "*** Working on [$dir] ***") if ($debug);
 		
 		## Set path to customer's local directory
 		$localdir = $main_path . $dir . "/";
-logger(__LINE__, "Local directory set as $localdir") if ($debug);
+#logger(__LINE__, "Local directory set as $localdir") if ($debug);
 
 		## Create customer's local directory if not found
 		if (! -d $localdir)
@@ -50,73 +50,137 @@ logger(__LINE__, "$localdir does not exist, creating...") if ($debug);
 		## Get list of local debug dumps currently found in customers' directory
 		@tars = `ls ${localdir}*debug\*gz 2>/dev/null`;
 
-
-		($check_hr, $check_mday, $check_month, $check_yr, $check_dst) = (0,0,0,0,0);
+		($check_hr, $check_mday, $check_month, $check_yr, $check_min, $check_sec) = (0,0,0,0,0,0);
 			
 		foreach $tar (@tars) 
 		{
-logger(__LINE__, "-_-_-_-_-_-_-_-_-_-_-_-_-") if ($debug);
+#logger(__LINE__, "-_-_-_-_-_-_-_-_-_-_-_-_-") if ($debug);
 
 			chomp($tar);
-logger(__LINE__, "Current tar is $tar") if ($debug);
+#logger(__LINE__, "Current tar is $tar") if ($debug);
 			$local_dd_epoch = (stat($tar))[9];
-logger(__LINE__, "Epoch of $tar is $local_dd_epoch") if ($debug);
+#logger(__LINE__, "Epoch of $tar is $local_dd_epoch") if ($debug);
 			($Sec, $Min, $Hour, $Mday, $Month, $Year, $isDST) = (localtime($local_dd_epoch))[0,1,2,3,4,5,8];
 			
 			$Year += 1900;
-logger(__LINE__, "Timestamp for $tar is $Month/$Mday/$Year $Hour:$Min:$Sec") if ($debug);
+#logger(__LINE__, "Timestamp for $tar is $Month/$Mday/$Year $Hour:$Min:$Sec") if ($debug);
 			
 			## Set timestamp of local debug dump
-			if ($Year >= $check_yr)
+			if ($Year > $check_yr)
 			{
+#logger(__LINE__, "Year is greater, setting the following:") if ($debug);
 				$lyear = $Year;
+				$lmonth = $Month;
+				$lmday = $Mday;
+				$lhour = $Hour;
+				$lmin = $Min;
+				$lsec = $Sec;
 				$check_yr = $lyear;
-logger(__LINE__, "Year of local debug dump is $check_yr") if ($debug);
-				
-				if ($isDST != $check_dst)
+				$check_month = $lmonth;
+				$check_mday = $lmday;
+				$check_hr = $lhour;
+				$check_min = $lmin;
+				$check_sec = $lsec;
+#logger(__LINE__, "Year of local debug dump is $check_yr") if ($debug);
+#logger(__LINE__, "Month of local debug dump is $check_month") if ($debug);
+#logger(__LINE__, "Day of local debug dump is $lmday") if ($debug);
+#logger(__LINE__, "Hour of local debug dump is $lhour") if ($debug);
+#logger(__LINE__, "Min of local debug dump is $lmin") if ($debug);
+#logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+			}
+			elsif ($Year == $check_yr)
+			{
+				if ($Month > $check_month)
 				{
-					$lisDST = $isDST;
-					$check_dst = $lisDST;
-				}
-				
-				if ($Month >= $check_month)
-				{
+#logger(__LINE__, "{Year} is equal, but Month is greater, setting the following:") if ($debug);
 					$lmonth = $Month;
+					$lmday = $Mday;
+					$lhour = $Hour;
+					$lmin = $Min;
+					$lsec = $Sec;
 					$check_month = $lmonth;
-logger(__LINE__, "Month of local debug dump is $check_month") if ($debug);
-
-					if ($Mday >= $check_mday)
+					$check_mday = $lmday;
+					$check_hr = $lhour;
+					$check_min = $lmin;
+					$check_sec = $lsec;
+#logger(__LINE__, "Month of local debug dump is $check_month") if ($debug);
+#logger(__LINE__, "Day of local debug dump is $lmday") if ($debug);
+#logger(__LINE__, "Hour of local debug dump is $lhour") if ($debug);
+#logger(__LINE__, "Min of local debug dump is $lmin") if ($debug);
+#logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+				}
+				elsif ($Month == $check_month)
+				{
+					if ($Mday > $check_mday)
 					{
+#logger(__LINE__, "{Year,Month} is equal, but Day is greater, setting the following:") if ($debug);
 						$lmday = $Mday;
 						$lhour = $Hour;
 						$lmin = $Min;
 						$lsec = $Sec;
 						$check_mday = $lmday;
-logger(__LINE__, "Day of local debug dump is $lmday") if ($debug);
-logger(__LINE__, "Hour of local debug dump is $lhour") if ($debug);
-logger(__LINE__, "Min of local debug dump is $lmin") if ($debug);
-logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+						$check_hr = $lhour;
+						$check_min = $lmin;
+						$check_sec = $lsec;
+#logger(__LINE__, "Day of local debug dump is $lmday") if ($debug);
+#logger(__LINE__, "Hour of local debug dump is $lhour") if ($debug);
+#logger(__LINE__, "Min of local debug dump is $lmin") if ($debug);
+#logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+					}
+					elsif ($Mday == $check_mday)
+					{
+						if ( $Hour > $check_hr )
+						{
+#logger(__LINE__, "{Year,Month,Day} is equal, but Hour is greater, setting the following:") if ($debug);
+							$lhour = $Hour;
+							$lmin = $Min;
+							$lsec = $Sec;
+							$check_hr = $lhour;
+							$check_min = $lmin;
+							$check_sec = $lsec;
+#logger(__LINE__, "Hour of local debug dump is $lhour") if ($debug);
+#logger(__LINE__, "Min of local debug dump is $lmin") if ($debug);
+#logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+						}
+						elsif ($Hour == $check_hr)
+						{
+							if ( $Min > $check_min )
+							{
+#logger(__LINE__, "{Year,Month,Day,Hour} is equal, but Min is greater, setting the following:") if ($debug);
+								$lmin = $Min;
+								$lsec = $Sec;
+								$check_min = $lmin;
+								$check_sec = $lsec;
+#logger(__LINE__, "Min of local debug dump is $lmin") if ($debug);
+#logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+							}
+							elsif ($Min == $check_min)
+							{
+								if ($Sec > $check_sec)
+								{
+#logger(__LINE__, "{Year,Month,Day,Hour,Min} is equal, but Sec is greater, setting the following:") if ($debug);
+									$lsec = $Sec;
+									$check_sec = $lsec;
+#logger(__LINE__, "Sec of local debug dump is $lsec") if ($debug);
+								}
+							}
+						}
 					}
 				}
-				else
-				{
-					$check_month = $lmonth;
-logger(__LINE__, "Month of local debug dump is $check_month") if ($debug);
-				}
 			}
-logger(__LINE__, "_-_-_-_-_-_-_-_-_-_-_-_-_") if ($debug);
+#logger(__LINE__, "_-_-_-_-_-_-_-_-_-_-_-_-_") if ($debug);
 		}
 		
 		## Enter the customer's directory on the FTP site and get list of current debug dumps found
-logger(__LINE__, "Changing directory in FTP to $dir...") if ($debug);
+#logger(__LINE__, "Changing directory in FTP to $dir...") if ($debug);
 
-		# Check to see if FTP session has timed out
+		## Check to see if FTP session has timed out
 		if (not eval { $f->cwd($dir) })
 		{
 			$f = Net::FTP->new($host, Debug =>0) or die "Can't open $host: $@\n";
-			logger(__LINE__, "Opening connection to $host...") if ($debug);
+#logger(__LINE__, "Re-opening connection to $host...") if ($debug);
 			$f->login($user, $pass) or die "Can't login $user\n";
-			logger(__LINE__, "Logging in with $user and $pass...\n") if ($debug);
+#logger(__LINE__, "Logging in with $user and $pass...\n") if ($debug);
 			$f->cwd($dir) or die "Can't cwd to $dir\n";
 		}
 		
@@ -127,25 +191,25 @@ logger(__LINE__, "Changing directory in FTP to $dir...") if ($debug);
 
 		foreach $file (@files) 
 		{
-			if ($file =~ /^debug/ and $file =~ /\.gz$/) 
+			if ($file =~ /debugdump/ and $file =~ /\.gz$/) 
 			{
-logger(__LINE__, "^^^^^^^^^^^^^^^^^^^^^^^^^") if ($debug);
-logger(__LINE__, "Current file is $file") if ($debug);
+#logger(__LINE__, "^^^^^^^^^^^^^^^^^^^^^^^^^") if ($debug);
+#logger(__LINE__, "Current file is $file") if ($debug);
 
 				## Get epoch of each debug dump
 				$dd_epoch = $f->mdtm($file);
-logger(__LINE__, "Epoch of $file is $dd_epoch") if ($debug);
+#logger(__LINE__, "Epoch of $file is $dd_epoch") if ($debug);
 
 				## Get timestamp of each debug dump
 				($csec, $cmin, $chour, $cmday, $cmonth, $cyear, $cisdst) = (localtime($dd_epoch))[0,1,2,3,4,5,8];
 				$cyear += 1900;
-logger(__LINE__, "Timestamp of $file is $cmonth/$cmday/$cyear $chour:$cmin:$csec") if ($debug);
+#logger(__LINE__, "Timestamp of $file is $cmonth/$cmday/$cyear $chour:$cmin:$csec") if ($debug);
 logger(__LINE__, "[local][current]:[$lmonth,$lmday,$lyear,$lhour,$lmin,$lsec][$cmonth,$cmday,$cyear,$chour,$cmin,$csec]");
 			
 				## Compare timestamps to see if debug dumps are newer and pull them if so
 				if ($cyear > $lyear) 
 				{
-logger(__LINE__, "$cyear is greater than $lyear, therefore more recent, pulling $file...") if ($debug);
+#logger(__LINE__, "$cyear is greater than $lyear, therefore more recent, pulling $file...") if ($debug);
 					$f->binary();
 					$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
 					$Files[$i] = $file;
@@ -156,7 +220,8 @@ logger(__LINE__, "$cyear is greater than $lyear, therefore more recent, pulling 
 				{
 					if ($cmonth > $lmonth) 
 					{
-logger(__LINE__, "Years are equal, but $cmonth is greater than $lmonth, therefore more recent, pulling $file...") if ($debug);
+#logger(__LINE__, "Years are equal, but $cmonth is greater than $lmonth, therefore more recent, pulling $file...") if ($debug);
+logger(__LINE__, "[local][current]:[$lmonth,$lmday,$lyear,$lhour,$lmin,$lsec][$cmonth,$cmday,$cyear,$chour,$cmin,$csec]");
 						$f->binary();
 						$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
 						$Files[$i] = $file;
@@ -167,7 +232,8 @@ logger(__LINE__, "Years are equal, but $cmonth is greater than $lmonth, therefor
 					{
 						if ($cmday > $lmday) 
 						{
-logger(__LINE__, "Years and months are equal, but $cmday is greater than $lmday, therefore more recent, pulling $file...") if ($debug);
+#logger(__LINE__, "Years and months are equal, but $cmday is greater than $lmday, therefore more recent, pulling $file...") if ($debug);
+logger(__LINE__, "[local][current]:[$lmonth,$lmday,$lyear,$lhour,$lmin,$lsec][$cmonth,$cmday,$cyear,$chour,$cmin,$csec]");
 							$f->binary();
 							$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
 							$Files[$i] = $file;
@@ -178,7 +244,8 @@ logger(__LINE__, "Years and months are equal, but $cmday is greater than $lmday,
 						{
 							if ($chour > $lhour) 
 							{
-logger(__LINE__, "Years, months and days are equal, but $chour is greater than $lhour, therefore more recent, pulling $file...") if ($debug);
+#logger(__LINE__, "Years, months and days are equal, but $chour is greater than $lhour, therefore more recent, pulling $file...") if ($debug);
+logger(__LINE__, "[local][current]:[$lmonth,$lmday,$lyear,$lhour,$lmin,$lsec][$cmonth,$cmday,$cyear,$chour,$cmin,$csec]");
 								$f->binary();
 								$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
 								$Files[$i] = $file;
@@ -189,7 +256,8 @@ logger(__LINE__, "Years, months and days are equal, but $chour is greater than $
 							{
 								if ($cmin > $lmin) 
 								{
-logger(__LINE__, "Years, months, days, and hours are equal, but $cmin is greater than $lmin, therefore more recent, pulling $file...") if ($debug);
+#logger(__LINE__, "Years, months, days, and hours are equal, but $cmin is greater than $lmin, therefore more recent, pulling $file...") if ($debug);
+logger(__LINE__, "[local][current]:[$lmonth,$lmday,$lyear,$lhour,$lmin,$lsec][$cmonth,$cmday,$cyear,$chour,$cmin,$csec]");
 									$f->binary();
 									$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
 									$Files[$i] = $file;
@@ -200,7 +268,8 @@ logger(__LINE__, "Years, months, days, and hours are equal, but $cmin is greater
 								{
 									if ($csec > $lsec) 
 									{
-logger(__LINE__, "Years, months, days, hours and minutes are equal, but $csec is greater than $lsec, therefore more recent, pulling $file...") if ($debug);
+#logger(__LINE__, "Years, months, days, hours and minutes are equal, but $csec is greater than $lsec, therefore more recent, pulling $file...") if ($debug);
+logger(__LINE__, "[local][current]:[$lmonth,$lmday,$lyear,$lhour,$lmin,$lsec][$cmonth,$cmday,$cyear,$chour,$cmin,$csec]");
 										$f->binary();
 										$f->get($file,$localdir.$file) or die "Can't get $file from $dir\n";
 										$Files[$i] = $file;
@@ -215,21 +284,26 @@ logger(__LINE__, "Years, months, days, hours and minutes are equal, but $csec is
 			}
 
 		$z = $i -1 if ($debug);
-logger(__LINE__, "Current count is $z and file is $Files[$z]") if ($debug);
-logger(__LINE__, "vvvvvvvvvvvvvvvvvvvvvvvvv") if ($debug);
+#logger(__LINE__, "Current count is $z and file is $Files[$z]") if ($debug);
+#logger(__LINE__, "vvvvvvvvvvvvvvvvvvvvvvvvv") if ($debug);
 		}
 
 		if ($check <= 0)
 		{
 logger(__LINE__, "No new files, going on to next customer...") if ($debug);
 logger(__LINE__, "*** Done working on [$dir] ***\n") if ($debug);
-logger(__LINE__, "===============================================================================================") if ($debug);
+logger(__LINE__, "===============================================================================================\n") if ($debug);
 			$f->cwd("/") or die "Cant cwd to '/'\n";
 			next CUSTOMER;
 		}
 		else { $f->cwd("/") or die "Can't cwd to '/'\n"; }
 	}
-	else { logger(__LINE__, "current \$dir is not a directory: $dir") if ($debug); next CUSTOMER; }
+	else 
+	{ 
+		logger(__LINE__, "current \$dir is not a directory: $dir\n") if ($debug);
+		logger(__LINE__, "===============================================================================================\n") if ($debug);		
+		next CUSTOMER; 
+	}
 	
 	#######################################################################################################################
 	# Debug Dump Extraction Section                                                                                       #
@@ -349,7 +423,7 @@ logger(__LINE__, "Moving messages to messages.txt...") if ($debug);
 		$v282 = "/Access.Share/support/MT_Debug_Flash/28v2/Mono/";
 
 		## If unit is on 5.0v1.0
-		if($rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2") {
+		if($rev eq "1.0" or $rev eq "1.1" or $rev eq "1.2" or $rev ge "5.0") {
 logger(__LINE__, "SAN is on Christy stack") if ($debug);
 			
 			## Create path variables for xml and Storage from source path
@@ -714,7 +788,7 @@ logger(__LINE__,"passing following variables: \n\tfile - $file\n\tdump_path - $d
 		
 		$from    = 'debugdumps@stortrends.com';
 logger(__LINE__,"Email is being sent from: $from") if ($debug);
-		$to      = 'jorger@ami.com';
+		$to      = 'StorTrends-Support@ami.com'; #'jorger@ami.com';
 logger(__LINE__,"Email is being sent to: $to") if ($debug);
 		$subject = "New Debug Dump Analysis Available for [$dir]";
 logger(__LINE__,"Email subject is: $subject") if ($debug);
@@ -752,6 +826,11 @@ sub logger
 	($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = localtime();
 	$year += 1900;
 	$mon += 1;
+	$mon = "0" x (2-length($mon)).$mon;
+	$mday = "0" x (2-length($mday)).$mday;
+	$hour = "0" x (2-length($hour)).$hour;
+	$min = "0" x (2-length($min)).$min;
+	$sec = "0" x (2-length($sec)).$sec;
 	
 	$logFile = "/var/log/debugDump.log";
 	
@@ -838,4 +917,5 @@ sub rotate
 			unlink $useThisGZip;
 		}
 	}
+	closedir(DIR);
 }
