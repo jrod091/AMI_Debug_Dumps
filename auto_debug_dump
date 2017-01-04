@@ -804,7 +804,22 @@ logger(__LINE__,"Email attachement is: $attach") if ($debug);
 					  ->attach_file($attach)
 					  ->send;
 logger(__LINE__,"Email Sent.") if ($debug);
-		
+
+		## Upload analysis back to FTP
+		if (not eval { $f->put($attach) })
+		{
+			$f = Net::FTP->new($host, Debug =>0) or die "Can't open $host: $@\n";
+#logger(__LINE__, "Re-opening connection to $host...") if ($debug);
+			$f->login($user, $pass) or die "Can't login $user\n";
+#logger(__LINE__, "Logging in with $user and $pass...\n") if ($debug);
+			$f->cwd($dir) or die "Can't cwd to $dir\n";
+			$f->put($attach) or die "Can't put $attach in $dir\n";
+logger(__LINE__,"adding analysis file [$attach] back to FTP in [$dir]") if ($debug);
+		}
+		else
+		{
+logger(__LINE__,"adding analysis file [$attach] back to FTP in [$dir]") if ($debug);
+		}
 logger(__LINE__, "===============================================================================================") if ($debug);
 	}
 	
