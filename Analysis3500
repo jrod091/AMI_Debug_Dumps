@@ -1118,51 +1118,59 @@ print "*                                                                        
 print "*******************************************************************************************************************************************************************************************************************************************************************************\n";
 print $analysis_output;	
 
-print "*******************************************************************************************************************************************************************************************************************************************************************************\n";
 #----
-$z = 0;
-if ($role{$sarNames[0]} eq "Seconadry")
-{
-	print $OUTPUT "name,role,original role,status,sec snap count,compression,encryption,dedupe,primary IP,secondary IP,primary container,secondary container,snap levels,volumes,primary volume,secondary volume,current snap name,current snap time,previous snap name, previous snap time,next LBA,64k sent,total 64k,total bytes,link usage time,overall 64k sent,overall bytes sent, overall gain ratio, replication plans\n";
-	foreach $pair (@sarNames)
-	{
-		print $OUTPUT "$pair,$role{$pair},$orig{$pair},$status{$pair},$secSnap{$pair},$compression{$pair},$encryption{$pair},$dedupe{$pair},$priIP{$pair},$secIP{$pair},$priCon{$pair},$secCon{$pair},$lvl{$pair},$numVol{$pair},$priVol{$pair}[0],$secVol{$pair}[0],$curSnapName{$pair}[0],$time{$curSnapName{$pair}[0]},$prevSnapName{$pair}[0],$time{$prevSnapName{$pair}[0]},$lba{$pair}[0],$sent64k{$pair}[0],$total64k{$pair}[0],$total{$pair}[0],$usage{$pair}[0],$overall64k{$pair},$overall{$pair},$gain{$pair},$plan{$pair}[0]\n";
-		
-		while (defined $priVol{$pair}[$z])
-		{
-			print $OUTPUT ",,,,,,,,,,,,,,$priVol{$pair}[$z],$secVol{$pair}[$z],$curSnapName{$pair}[$z],$time{$curSnapName{$pair}[$z]},$prevSnapName{$pair}[$z],$time{$prevSnapName{$pair}[$z]},$lba{$pair}[$z],$sent64k{$pair}[$z],$total64k{$pair}[$z],$total{$pair}[$z],$usage{$pair}[$z],,,,";
-			if (defined $plan{$pair}[$z]) { print $OUTPUT "$plan{$pair}[$z]\n"; }
-			else	{ print $OUTPUT "\n"; }
-			$z++;
-		}
-		while (defined $plan{$pair}[$z])
-		{
-			print $OUTPUT ",,,,,,,,,,,,,,,,,,,,,,,,,,,,$plan{$pair}[$z]\n";
-			$z++;
-		}
-	}
-}
+#SAR Info
+print $OUTPUT "\nSAR information\n";
+
+if (numPairs eq "0")	{ print $OUTPUT "n/a\n"; }
 else
 {
-	print SAROUT "name,role,original role,status,compression,encryption,dedupe,primary IP,secondary IP,primary container,secondary container,snap levels,volumes,primary volume,secondary volume,current snap name,current snap time,previous snap name, previous snap time,next LBA,64k sent,total 64k,total bytes,link usage time,overall 64k sent,overall bytes sent, overall gain ratio, replication plans\n";
-	foreach $pair (@sarNames)
+	if ($role{$sarNames[0]} eq "Seconadry")
 	{
-		print $OUTPUT "$pair,$role{$pair},$orig{$pair},$status{$pair},$compression{$pair},$encryption{$pair},$dedupe{$pair},$priIP{$pair},$secIP{$pair},$priCon{$pair},$secCon{$pair},$lvl{$pair},$numVol{$pair},$priVol{$pair}[0],$secVol{$pair}[0],$curSnapName{$pair}[0],$time{$curSnapName{$pair}[0]},$prevSnapName{$pair}[0],$time{$prevSnapName{$pair}[0]},$lba{$pair}[0],$sent64k{$pair}[0],$total64k{$pair}[0],$total{$pair}[0],$usage{$pair}[0],$overall64k{$pair},$overall{$pair},$gain{$pair},$plan{$pair}[0]\n";
-		
-		while (defined $priVol{$pair}[$z])
+		print $OUTPUT "name,role,original role,status,sec snap count,compression,encryption,dedupe,primary IP,secondary IP,primary container,secondary container,snap levels,volumes,primary volume,secondary volume,current snap name,current snap time,previous snap name, previous snap time,next LBA,64k sent,total 64k,total bytes,link usage time,overall 64k sent,overall bytes sent, overall gain ratio, replication plans\n";
+		foreach $pair (@sarNames)
 		{
-			print $OUTPUT ",,,,,,,,,,,,,$priVol{$pair}[$z],$secVol{$pair}[$z],$curSnapName{$pair}[$z],$time{$curSnapName{$pair}[$z]},$prevSnapName{$pair}[$z],$time{$prevSnapName{$pair}[$z]},$lba{$pair}[$z],$sent64k{$pair}[$z],$total64k{$pair}[$z],$total{$pair}[$z],$usage{$pair}[$z],,,,";
-			if (defined $plan{$pair}[$z]) { print $OUTPUT "$plan{$pair}[$z]\n"; }
-			else	{ print $OUTPUT "\n"; }
-			$z++;
+			print $OUTPUT "$pair,$role{$pair},$orig{$pair},$status{$pair},$secSnap{$pair},$compression{$pair},$encryption{$pair},$dedupe{$pair},$priIP{$pair},$secIP{$pair},$priCon{$pair},$secCon{$pair},$lvl{$pair},$numVol{$pair},$priVol{$pair}[0],$secVol{$pair}[0],$curSnapName{$pair}[0],$time{$curSnapName{$pair}[0]},$prevSnapName{$pair}[0],$time{$prevSnapName{$pair}[0]},$lba{$pair}[0],$sent64k{$pair}[0],$total64k{$pair}[0],$total{$pair}[0],$usage{$pair}[0],$overall64k{$pair},$overall{$pair},$gain{$pair},$plan{$pair}[0]\n";
+			
+			$z = 1;
+			while (defined $priVol{$pair}[$z])
+			{
+				print $OUTPUT ",,,,,,,,,,,,,,$priVol{$pair}[$z],$secVol{$pair}[$z],$curSnapName{$pair}[$z],$time{$curSnapName{$pair}[$z]},$prevSnapName{$pair}[$z],$time{$prevSnapName{$pair}[$z]},$lba{$pair}[$z],$sent64k{$pair}[$z],$total64k{$pair}[$z],$total{$pair}[$z],$usage{$pair}[$z],,,,";
+				if (defined $plan{$pair}[$z]) { print $OUTPUT "$plan{$pair}[$z]\n"; }
+				else	{ print $OUTPUT "\n"; }
+				$z++;
+			}
+			while (defined $plan{$pair}[$z])
+			{
+				print $OUTPUT ",,,,,,,,,,,,,,,,,,,,,,,,,,,,$plan{$pair}[$z]\n";
+				$z++;
+			}
 		}
-		while (defined $plan{$pair}[$z])
+	}
+	else
+	{
+		print $OUTPUT "name,role,original role,status,compression,encryption,dedupe,primary IP,secondary IP,primary container,secondary container,snap levels,volumes,primary volume,secondary volume,current snap name,current snap time,previous snap name, previous snap time,next LBA,64k sent,total 64k,total bytes,link usage time,overall 64k sent,overall bytes sent, overall gain ratio, replication plans\n";
+		foreach $pair (@sarNames)
 		{
-			print $OUTPUT ",,,,,,,,,,,,,,,,,,,,,,,,,,,$plan{$pair}[$z]\n";
-			$z++;
+			print $OUTPUT "$pair,$role{$pair},$orig{$pair},$status{$pair},$compression{$pair},$encryption{$pair},$dedupe{$pair},$priIP{$pair},$secIP{$pair},$priCon{$pair},$secCon{$pair},$lvl{$pair},$numVol{$pair},$priVol{$pair}[0],$secVol{$pair}[0],$curSnapName{$pair}[0],$time{$curSnapName{$pair}[0]},$prevSnapName{$pair}[0],$time{$prevSnapName{$pair}[0]},$lba{$pair}[0],$sent64k{$pair}[0],$total64k{$pair}[0],$total{$pair}[0],$usage{$pair}[0],$overall64k{$pair},$overall{$pair},$gain{$pair},$plan{$pair}[0]\n";
+			
+			$z = 1;
+			while (defined $priVol{$pair}[$z])
+			{
+				print $OUTPUT ",,,,,,,,,,,,,$priVol{$pair}[$z],$secVol{$pair}[$z],$curSnapName{$pair}[$z],$time{$curSnapName{$pair}[$z]},$prevSnapName{$pair}[$z],$time{$prevSnapName{$pair}[$z]},$lba{$pair}[$z],$sent64k{$pair}[$z],$total64k{$pair}[$z],$total{$pair}[$z],$usage{$pair}[$z],,,,";
+				if (defined $plan{$pair}[$z]) { print $OUTPUT "$plan{$pair}[$z]\n"; }
+				else	{ print $OUTPUT "\n"; }
+				$z++;
+			}
+			while (defined $plan{$pair}[$z])
+			{
+				print $OUTPUT ",,,,,,,,,,,,,,,,,,,,,,,,,,,$plan{$pair}[$z]\n";
+				$z++;
+			}
 		}
 	}
 }
+print "*******************************************************************************************************************************************************************************************************************************************************************************\n";
 print "*                                                                                                                               UPS Information                                                                                                                               *\n";
 print "*******************************************************************************************************************************************************************************************************************************************************************************\n";
 
@@ -1286,7 +1294,8 @@ sub findLocalTime
 	else
 	{
 		($sec, $min, $hour, $day,$month,$year) = (localtime($epoch))[0,1,2,3,4,5];
-		$year = $year + 1900;
+		$year += 1900;
+		$month += 1;
 
 		$out = "$month/$day/$year " . "0" x (2 - length($hour)) . $hour . ":" . "0" x (2 - length($min)) . $min . ":" . "0" x (2 - length($sec)) . $sec;
 	}
